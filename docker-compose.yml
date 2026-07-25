@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_service
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+    environment:
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL}
+    cpuset: "0-15"
+    deploy:
+      resources:
+        limits:
+#          cpus: '4.0'
+          memory: 4096M
+    restart: unless-stopped
+
+  app:
+    image: python:3.11-slim
+    container_name: rag_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+    working_dir: /app
+    env_file:
+      - .env
+    command: /bin/sh -c "pip install -r requirements.txt && python main.py"
+    depends_on:
+      - postgres
+      - ollama
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  ollama_storage:
