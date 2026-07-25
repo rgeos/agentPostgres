@@ -4,6 +4,7 @@ import json
 import ollama
 from pypdf import PdfReader
 from database import DatabaseTool, DecimalEncoder
+from AgentSQL import AgentSQL
 
 
 class AgentSupport:
@@ -71,7 +72,69 @@ class AgentSupport:
         except Exception as e:
             return f"[]"
 
-    def handle_customer_inquiry(
+    # make the agent collaborate
+    def run_collaboration(
+        self,
+        customer_question: str,
+        agent_sql_instance: AgentSQL,
+        selected_model: str | None = None,
+    ) -> dict:
+        """
+        Collaboration: AgentSQL generates advanced, safe queries to find inventory,
+        AgentSupport merges it with PDF manuals for customer-facing answers.
+        """
+        active_model = selected_model if selected_model else self.default_model
+
+        # 1. Use AgentSQL to dynamically understand the inventory request
+        print(f"[COLLABORATION] Upgrading AgentSupport query parsing via AgentSQL")
+        generated_sql = agent_sql_instance.sql_generation_worker.generate_query(
+            customer_question, model_name=active_model
+        )
+
+        # 2. Safety Fallback: If AgentSQL fails, drop back to AgentSupport's basic keyword matching
+        table_data_json = "[]"
+        if generated_sql and generated_sql.strip().lower().startswith("select"):
+            try:
+                db_rows = self.db_tool.execute_read_query_raw(generated_sql)
+                table_data_json = json.dumps(db_rows, cls=DecimalEncoder)
+            except Exception:
+                table_data_json = self._query_dedicated_table(
+                    customer_question
+                )  # Fallback
+        else:
+            table_data_json = self._query_dedicated_table(customer_question)  # Fallback
+
+        # 3. Gather PDF knowledge as usual
+        pdf_documentation_text = self._extract_text_from_pdfs()
+
+        # 4. Generate final answer utilizing both sources
+        system_prompt = (
+            f"You are 'AgentSupport'. Help the customer using ONLY the data spaces provided.\n"
+            f"--- DATA SOURCE 1: LIVE INVENTORY (via AgentSQL translation) ---\n"
+            f"{table_data_json}\n\n"
+            f"--- DATA SOURCE 2: PRODUCT MANUALS (PDF TEXT) ---\n"
+            f"{pdf_documentation_text or '[No PDF manuals found]'}\n\n"
+            f"CUSTOMER INQUIRY: '{customer_question}'\n"
+            f"ANSWER:"
+        )
+
+        try:
+            response = self.client.generate(
+                model=active_model,
+                prompt=system_prompt,
+                options={"temperature": 0.1, "num_ctx": 4096},
+            )
+            reply = response["response"].strip()
+        except Exception:
+            reply = "Internal processing link error."
+
+        return {
+            "agent_name": "AgentSupport+AgentSQL_Collaborative",
+            "customer_reply": reply,
+            "generated_sql_used": generated_sql,
+        }
+
+    def _generate_advice(
         self, customer_question: str, selected_model: str | None = None
     ) -> dict:
         """Orchestrates sandboxed data sources to answer customer product questions."""

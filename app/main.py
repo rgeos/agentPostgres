@@ -62,6 +62,12 @@ class SupportRequest(BaseModel):
     model: str | None = None
 
 
+class IntentRouterRequest(BaseModel):
+    question: str
+    user_role: str
+    model: str | None = None
+
+
 # todo - improve on the dashboard (connect to REDASH)
 @app.get("/", response_class=HTMLResponse)
 def read_dashboard_root():
@@ -157,10 +163,34 @@ def handle_support_chat(payload: SupportRequest):
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Inquiry cannot be blank.")
 
-    result = agent_support.handle_customer_inquiry(
+    result = agent_support._generate_advice(
         customer_question=payload.question, selected_model=payload.model
     )
     return result
+
+
+@app.post("/agent/collaborate")
+def automated_collaboration_entrypoint(payload: IntentRouterRequest):
+    """
+    Central Orchestrator endpoint that dynamically binds agents
+    together based on user role and inquiry type.
+    """
+    # Route Collaboration 1: Executive Business Analytics (AgentSQL + AgentConsulting)
+    if payload.user_role == "executive":
+        return agent_consulting.run_collaboration(
+            user_question=payload.question, selected_model=payload.model
+        )
+
+    # Route Collaboration 2: Customer Care Ops (AgentSQL + AgentSupport)
+    elif payload.user_role == "customer":
+        return agent_support.run_collaboration(
+            customer_question=payload.question,
+            agent_sql_instance=agent_sql,
+            selected_model=payload.model,
+        )
+
+    # Default to standard data fetching
+    return agent_sql.run_workflow(payload.question, selected_model=payload.model)
 
 
 if __name__ == "__main__":

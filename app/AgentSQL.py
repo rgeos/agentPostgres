@@ -121,7 +121,7 @@ class ResponseSynthesisAgent:
     def __init__(self, client: ollama.Client):
         self.client = client
 
-    def synthesize_answer(
+    def _generate_advice(
         self, user_question: str, db_rows_json: str, model_name: str
     ) -> str:
         synthesis_prompt = (
@@ -201,7 +201,7 @@ class AgentSQL:
             }
 
         clean_json_payload = json.dumps(tool_output_parsed)
-        final_answer = self.synthesis_worker.synthesize_answer(
+        final_answer = self.synthesis_worker._generate_advice(
             user_question, clean_json_payload, model_name=active_model
         )
 
