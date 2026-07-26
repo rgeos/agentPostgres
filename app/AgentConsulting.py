@@ -62,7 +62,7 @@ class AgentConsulting:
         clean_json_data = json.dumps(db_rows, cls=DecimalEncoder)
         live_schema_context = self.discoverer.get_active_schema_documentation()
 
-        consulting_advice = self._generate_strategic_advice(
+        consulting_advice = self._generate_advice(
             user_question=user_question,
             db_rows_json=clean_json_data,
             schema_context=live_schema_context,
@@ -77,7 +77,53 @@ class AgentConsulting:
             "active_model": active_model,
         }
 
-    def _generate_strategic_advice(
+    # make the agent collaborate
+    def run_collaboration(
+        self, user_question: str, agent_sql_instance, selected_model: str | None = None
+    ) -> dict:
+        """
+        Collaboration: AgentSQL fetches and cleans data,
+        AgentConsulting synthesizes corporate strategy from it.
+        """
+        active_model = selected_model if selected_model else self.default_model
+
+        # 1. Delegate data gathering to AgentSQL
+        print(f"[COLLABORATION] Routing data gathering to AgentSQL")
+        sql_result = agent_sql_instance.run_workflow(
+            user_question, selected_model=active_model
+        )
+
+        # If AgentSQL failed to get data, return its fallback message safely
+        if not sql_result.get("tool_called") or not sql_result.get("raw_db_rows"):
+            return {
+                "success": False,
+                "consulting_advice": f"Consulting blocked. AgentSQL Reason: {sql_result['answer']}",
+                "active_model": active_model,
+            }
+
+        # 2. Extract clean data payloads from AgentSQL's output
+        db_rows = sql_result["raw_db_rows"]
+        clean_json_data = json.dumps(db_rows, cls=DecimalEncoder)
+        live_schema_context = self.discoverer.get_active_schema_documentation()
+
+        # 3. AgentConsulting performs strategic synthesis
+        print(f"[COLLABORATION] Routing data to AgentConsulting for strategic advice")
+        strategic_advice = self._generate_advice(
+            user_question=user_question,
+            db_rows_json=clean_json_data,
+            schema_context=live_schema_context,
+            model_name=active_model,
+        )
+
+        return {
+            "success": True,
+            "generated_sql": sql_result["generated_sql"],
+            "metrics_payload": db_rows,
+            "consulting_advice": strategic_advice,
+            "active_model": active_model,
+        }
+
+    def _generate_advice(
         self,
         user_question: str,
         db_rows_json: str,

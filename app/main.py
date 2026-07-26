@@ -16,7 +16,7 @@ db_manager = DatabaseManager()
 agent_sql = AgentSQL()
 agent_consulting = AgentConsulting()
 # todo - the value of the arguments should be in the .env
-agent_support = AgentSupport(target_table="products", pdf_dir_path="./support_pdfs")
+agent_support = AgentSupport(target_table="products", pdf_dir_path="./documentation")
 
 
 @asynccontextmanager
@@ -59,6 +59,12 @@ class QueryResponse(BaseModel):
 
 class SupportRequest(BaseModel):
     question: str
+    model: str | None = None
+
+
+class IntentRouterRequest(BaseModel):
+    question: str
+    user_role: str
     model: str | None = None
 
 
@@ -157,10 +163,37 @@ def handle_support_chat(payload: SupportRequest):
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="Inquiry cannot be blank.")
 
-    result = agent_support.handle_customer_inquiry(
+    result = agent_support._generate_advice(
         customer_question=payload.question, selected_model=payload.model
     )
     return result
+
+
+@app.post("/agent/collaborate")
+def automated_collaboration_entrypoint(payload: IntentRouterRequest):
+    """
+    Central Orchestrator endpoint that dynamically binds agents
+    together based on the frontend selected mode dropdown.
+    """
+    # Route 1: Consulting Query (AgentConsulting Strategic Engine)
+    if payload.user_role == "executive":
+        return agent_consulting.run_collaboration(
+            user_question=payload.question,
+            agent_sql_instance=agent_sql,
+            selected_model=payload.model
+        )
+
+    # Route 2: Support Query (AgentSupport Knowledge Fusion)
+    elif payload.user_role == "customer":
+        return agent_support.run_collaboration(
+            customer_question=payload.question,
+            agent_sql_instance=agent_sql,
+            selected_model=payload.model,
+        )
+
+    # Route 3: Regular SQL Query (AgentSQL Baseline Parser)
+    return agent_sql.run_workflow(payload.question, selected_model=payload.model)
+
 
 
 if __name__ == "__main__":
