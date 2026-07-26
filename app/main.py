@@ -173,15 +173,17 @@ def handle_support_chat(payload: SupportRequest):
 def automated_collaboration_entrypoint(payload: IntentRouterRequest):
     """
     Central Orchestrator endpoint that dynamically binds agents
-    together based on user role and inquiry type.
+    together based on the frontend selected mode dropdown.
     """
-    # Route Collaboration 1: Executive Business Analytics (AgentSQL + AgentConsulting)
+    # Route 1: Consulting Query (AgentConsulting Strategic Engine)
     if payload.user_role == "executive":
         return agent_consulting.run_collaboration(
-            user_question=payload.question, selected_model=payload.model
+            user_question=payload.question,
+            agent_sql_instance=agent_sql,
+            selected_model=payload.model
         )
 
-    # Route Collaboration 2: Customer Care Ops (AgentSQL + AgentSupport)
+    # Route 2: Support Query (AgentSupport Knowledge Fusion)
     elif payload.user_role == "customer":
         return agent_support.run_collaboration(
             customer_question=payload.question,
@@ -189,8 +191,9 @@ def automated_collaboration_entrypoint(payload: IntentRouterRequest):
             selected_model=payload.model,
         )
 
-    # Default to standard data fetching
+    # Route 3: Regular SQL Query (AgentSQL Baseline Parser)
     return agent_sql.run_workflow(payload.question, selected_model=payload.model)
+
 
 
 if __name__ == "__main__":

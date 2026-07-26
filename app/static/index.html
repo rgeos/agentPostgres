@@ -4,220 +4,72 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Air-Gapped RAG Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://jsdelivr.net"></script>
     <style>
-        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f4f6f9;margin:0;padding:20px}
-        .container{max-width:900px;margin:0 auto;background:#fff;padding:30px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.05)}
-        h1{color:#2c3e50;margin-top:0;border-bottom:2px solid #eaeaea;padding-bottom:10px}
-        .stats-bar{display:flex;gap:15px;margin-bottom:15px}
-        .badge{padding:6px 12px;border-radius:4px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
-        .badge-timer{background:#eef2f7;color:#475569;border:1px solid #cbd5e1}
-        .badge-server{background:#dcfce7;color:#166534;border:1px solid #bbf7d0;display:none}
-        .input-group{display:flex;gap:10px;margin:15px 0 20px 0}
-        select{padding:12px;border:1px solid #ccc;border-radius:4px;font-size:16px;background:#fff;outline:none;cursor:pointer;min-width:200px}
-        input[type=text]{flex:1;padding:12px;border:1px solid #ccc;border-radius:4px;font-size:16px;outline:none}
-        input[type=text]:focus,select:focus{border-color:#3498db}
-        button{background:#3498db;color:#fff;border:none;padding:12px 24px;border-radius:4px;cursor:pointer;font-size:16px;font-weight:700;transition:background .2s}
-        button:hover {background:#2980b9}
-        button:disabled,select:disabled{background:#bdc3c7;cursor:not-allowed}
-        .response-box{background:#f8f9fa;border-left:4px solid #3498db;padding:15px;margin-bottom:25px;min-height:50px;font-size:15px;line-height:1.5;white-space:pre-wrap}
-        .sql-box{font-family:"Courier New",monospace;background:#2c3e50;color:#ecf0f1;padding:12px;border-radius:4px;font-size:13px;margin-bottom:20px;overflow-x:auto;display:none}
-
-        /* Visualization Containers */
-        .visualization-container{margin-top:25px;min-height:100px;display:flex;justify-content:center;width:100%}
-        .chart-wrapper{position:relative;height:400px;width:100%;max-width:700px}
-
-        .metric-card{background:#e8f4fd;border:1px solid #bee3f8;padding:25px;border-radius:6px;text-align:center;width:100%;max-width:350px}
-        .metric-value{font-size:42px;font-weight:700;color:#2b6cb0}
-        .metric-label{font-size:14px;color:#4a5568;text-transform:uppercase;margin-top:5px;letter-spacing:.5px}
+        :root { --bg: #f8f9fa; --card: #ffffff; --text: #212529; --primary: #0d6efd; --border: #dee2e6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .dashboard { width: 100%; max-width: 1000px; background: var(--card); padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1 { margin-top: 0; font-size: 24px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        .metrics-bar { display: flex; gap: 20px; margin-bottom: 20px; font-size: 14px; color: #6c757d; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 14px; }
+        select, textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+        textarea { height: 100px; resize: vertical; }
+        button { background-color: var(--primary); color: white; border: none; padding: 12px 24px; font-size: 14px; font-weight: bold; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+        button:hover { background-color: #0b5ed7; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .output-section { margin-top: 30px; display: none; }
+        .card { border: 1px solid var(--border); border-radius: 4px; padding: 15px; margin-bottom: 15px; background: #fafafa; }
+        .card-title { font-weight: bold; margin-bottom: 8px; font-size: 14px; color: #495057; text-transform: uppercase; }
+        pre { margin: 0; white-space: pre-wrap; font-family: monospace; font-size: 13px; background: #f1f3f5; padding: 10px; border-radius: 4px; }
+        .advice-content { line-height: 1.6; font-size: 15px; }
+        .advice-content strong { color: #000; font-weight: 600; }
+        .chart-container { position: relative; height: 300px; width: 100%; margin-top: 15px; }
     </style>
 </head>
-<body onload="populateAvailableModels()">
-
-<div class="container">
-    <h1>Local Database AI Assistant</h1>
-
-    <div class="stats-bar">
-        <div class="badge badge-timer" id="stopwatchBadge">⏱️ Stopwatch: 0.00s</div>
-        <div class="badge badge-server" id="serverTimeBadge">⚡ Server: 0ms</div>
+<body>
+    <div class="dashboard">
+        <h1>Local Database AI Assistant</h1>
+        <div class="metrics-bar">
+            <span>⏱ Stopwatch: <span id="stopwatch">0.00s</span></span>
+            <span>⚡ Server: <span id="serverTime">0ms</span></span>
+        </div>
+        <div class="form-group">
+            <label for="agentMode">Select Assistant Mode:</label>
+            <select id="agentMode">
+                <option value="sql">Regular SQL Query (AgentSQL)</option>
+                <option value="executive">Consulting Query (AgentConsulting)</option>
+                <option value="customer">Support Query (AgentSupport)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="promptInput">Prompt Query:</label>
+            <textarea id="promptInput" placeholder="System ready. Enter your prompt query above."></textarea>
+        </div>
+        <button id="askBtn" onclick="submitQuery()">Ask Agent</button>
+        <div id="outputSection" class="output-section">
+            <div id="sqlCard" class="card" style="display:none;">
+                <div class="card-title">Generated SQL Query</div>
+                <pre id="sqlDisplay"></pre>
+            </div>
+            <div id="adviceCard" class="card" style="display:none;">
+                <div class="card-title" id="adviceTitle">Strategic Advice</div>
+                <div id="adviceDisplay" class="advice-content"></div>
+            </div>
+            <div id="metricCard" class="card" style="display:none;">
+                <div class="card-title" id="metricTitle">Metric Summary</div>
+                <h2 id="metricDisplay" style="margin:0; color: var(--primary);"></h2>
+            </div>
+            <div id="chartCard" class="card" style="display:none;">
+                <div class="card-title">Data Visualization</div>
+                <div class="chart-container"><canvas id="ctxChart"></canvas></div>
+            </div>
+            <div id="rawCard" class="card" style="display:none;">
+                <div class="card-title">Raw JSON Payload</div>
+                <pre id="rawDisplay"></pre>
+            </div>
+        </div>
     </div>
-
-    <div class="input-group">
-        <select id="modelSelector" title="Select LLM Engine Profile Model"></select>
-        <input type="text" id="questionInput" placeholder="Ask a question (e.g., Show me all product stock counts)...">
-        <button id="submitBtn" onclick="submitQuestion()">Ask Agent</button>
-    </div>
-
-    <div class="sql-box" id="sqlBox"></div>
-    <div class="response-box" id="responseBox">System ready. Enter your prompt query above.</div>
-
-    <div class="visualization-container" id="vizContainer"></div>
-</div>
-
-<script>
-let timerInterval = null;
-let currentChart = null; // Store chart instance to destroy it later
-
-function startStopwatch(){
-    const e=document.getElementById("stopwatchBadge");
-    document.getElementById("serverTimeBadge").style.display="none";
-    let t=performance.now();
-    clearInterval(timerInterval),timerInterval=setInterval(()=>{let n=(performance.now()-t)/1e3;e.innerText=`⏱️ Stopwatch: ${n.toFixed(2)}s`},50)
-}
-
-function stopStopwatch(e,t){
-    clearInterval(timerInterval);
-    const n=document.getElementById("serverTimeBadge");
-    e&&(n.innerText=`⚡ Server [${t}]: ${e}ms`,n.style.display="flex")
-}
-
-async function populateAvailableModels(){
-    const e=document.getElementById("modelSelector");
-    try{
-        const t=await fetch("/health"),n=await t.json(),o=n.ollama.locally_cached_models||[],r=n.ollama.active_configured_default;
-        e.innerHTML="",o.length===0?e.innerHTML=`<option value="${r}">${r}</option>` :o.forEach(i=>{const l=document.createElement("option");l.value=i,l.text=i,i===r&&(l.selected=!0),e.appendChild(l)})
-    }catch(t){
-        e.innerHTML='<option value="">Failed to sync models</option>'
-    }
-}
-
-async function submitQuestion(){
-    const e=document.getElementById("questionInput"),
-          t=document.getElementById("submitBtn"),
-          n=document.getElementById("modelSelector"),
-          o=document.getElementById("responseBox"),
-          r=document.getElementById("sqlBox"),
-          i=document.getElementById("vizContainer"),
-          l=e.value.trim(),
-          c=n.value;
-
-    if(l){
-        o.innerText="Processing pipeline inference loop running on local CPU, please wait...";
-        r.style.display="none";
-        i.innerHTML=""; // Clear previous viz
-        e.disabled=!0,t.disabled=!0,n.disabled=!0;
-        startStopwatch();
-        RichmondFetch(l,c,o,r,i,e,t,n);
-    }
-}
-
-async function RichmondFetch(e,t,n,o,r,i,l,c){
-    try{
-        const a=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:e,model:t})});
-        if(!a.ok)throw new Error(`HTTP network error status payload: ${a.status}`);
-        const s=await a.json();
-
-        n.innerText=s.answer||"No response received.";
-        o.innerText=s.generated_sql?`Executed SQL Query: ${s.generated_sql}`:"";
-        o.style.display=s.generated_sql?"block":"none";
-
-        // VISUALIZATION LOGIC
-        if(s.visualization){
-            const u=s.visualization;
-            if("metric"===u.type){
-                renderMetric(u,r);
-            } else if("chart"===u.type && u.data){
-                renderChartJS(u, r);
-            }
-        }
-
-        stopStopwatch(s.execution_time_ms,s.active_model);
-    }catch(s){
-        stopStopwatch(null,"error");
-        n.innerText=`Error connecting to the API service instance: ${s.message}`;
-    }finally{
-        i.disabled=!1,l.disabled=!1,c.disabled=!1;
-    }
-}
-
-function renderMetric(e,t){
-    t.innerHTML=`<div class="metric-card"><div class="metric-value">${e.value}</div><div class="metric-label">${e.label}</div></div>`;
-}
-
-// NEW: Chart.js Implementation
-function renderChartJS(vizData, container){
-    // 1. Check for data validity
-    const labels = vizData.data.labels || [];
-    const datasets = vizData.data.datasets || [];
-    if(!datasets.length || !datasets[0].data.length){
-        container.innerHTML='<div style="background:#fff3cd;border:1px solid #ffeeba;color:#856404;padding:15px;border-radius:4px;">⚠️ No visual data values available.</div>';
-        return;
-    }
-
-    // 2. Prepare Container (Destroy old chart if exists to prevent glitches)
-    if(currentChart){
-        currentChart.destroy();
-    }
-    container.innerHTML = '<div class="chart-wrapper"><canvas id="resultsChart"></canvas></div>';
-    const ctx = document.getElementById('resultsChart').getContext('2d');
-
-    // 3. Determine Chart Type (Pie, Bar, Line)
-    const chartType = vizData.chart_style || 'bar';
-
-    // 4. Generate Colors
-    // If Pie/Doughnut, we need a unique color for EACH item in the dataset.
-    // If Bar/Line, we usually just need one color for the whole series.
-    const baseColors = [
-        '#3498db', '#e74c3c', '#2ecc71', '#9b59b6', '#f1c40f',
-        '#e67e22', '#1abc9c', '#34495e', '#7f8c8d', '#c0392b'
-    ];
-
-    const finalDatasets = datasets.map(ds => {
-        let bgColors, borderColors;
-
-        if(['pie', 'doughnut'].includes(chartType)){
-            // Multi-color for Pie
-            bgColors = labels.map((_, i) => baseColors[i % baseColors.length]);
-            borderColors = '#ffffff';
-        } else {
-            // Single color for Bar/Line
-            bgColors = '#3498db';
-            borderColors = '#2980b9';
-        }
-
-        return {
-            label: ds.label,
-            data: ds.data,
-            backgroundColor: bgColors,
-            borderColor: borderColors,
-            borderWidth: 1,
-            tension: 0.3 // Smooth curves for lines
-        };
-    });
-
-    // 5. Render Chart
-    currentChart = new Chart(ctx, {
-        type: chartType,
-        data: {
-            labels: labels,
-            datasets: finalDatasets
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    display: true
-                },
-                title: {
-                    display: true,
-                    text: finalDatasets[0].label || 'Query Results'
-                }
-            },
-            scales: {
-                y: {
-                    // Only show Y-axis for cartesian charts (not pie)
-                    display: !['pie', 'doughnut'].includes(chartType),
-                    beginAtZero: true
-                },
-                x: {
-                    display: !['pie', 'doughnut'].includes(chartType)
-                }
-            }
-        }
-    });
-}
-</script>
+    <script>let timerInterval,chartInstance=null;function formatMarkdown(e){return e.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\n/g,"<br>")}function resetUI(){clearInterval(timerInterval);if(chartInstance){chartInstance.destroy();chartInstance=null}document.getElementById("stopwatch").innerText="0.00s";document.getElementById("serverTime").innerText="0ms";document.getElementById("outputSection").style.display="none";document.getElementById("sqlCard").style.display="none";document.getElementById("adviceCard").style.display="none";document.getElementById("metricCard").style.display="none";document.getElementById("chartCard").style.display="none";document.getElementById("rawCard").style.display="none"}async function submitQuery(){const e=document.getElementById("promptInput").value,t=document.getElementById("agentMode").value,n=document.getElementById("askBtn");if(!e.trim())return;resetUI();n.disabled=!0;let s=Date.now();timerInterval=setInterval(()=>{document.getElementById("stopwatch").innerText=((Date.now()-s)/1e3).toFixed(2)+"s"},10);try{const o=await fetch("/agent/collaborate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:e,user_role:t,model:null})}),r=await o.json();clearInterval(timerInterval);document.getElementById("serverTime").innerText=((Date.now()-s)).toFixed(0)+"ms";document.getElementById("outputSection").style.display="block";if("sql"===t){if(r.generated_sql){document.getElementById("sqlDisplay").innerText=r.generated_sql;document.getElementById("sqlCard").style.display="block"}if(r.answer){document.getElementById("adviceTitle").innerText="Factual Answer";document.getElementById("adviceDisplay").innerHTML=formatMarkdown(r.answer);document.getElementById("adviceCard").style.display="block"}if(r.raw_db_rows&&r.raw_db_rows.length>0){document.getElementById("rawDisplay").innerText=JSON.stringify(r.raw_db_rows,null,2);document.getElementById("rawCard").style.display="block";const d=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:e,model:null})}),a=await d.json();if(a.visualization){renderVisualization(a.visualization)}}}else if("executive"===t){if(r.generated_sql){document.getElementById("sqlDisplay").innerText=r.generated_sql;document.getElementById("sqlCard").style.display="block"}if(r.consulting_advice){document.getElementById("adviceTitle").innerText="Executive Consulting Strategy";document.getElementById("adviceDisplay").innerHTML=formatMarkdown(r.consulting_advice);document.getElementById("adviceCard").style.display="block"}if(r.metrics_payload){document.getElementById("rawDisplay").innerText=JSON.stringify(r.metrics_payload,null,2);document.getElementById("rawCard").style.display="block";const l=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:e,model:null})}),c=await l.json();if(c.visualization){renderVisualization(c.visualization)}}}else if("customer"===t){if(r.generated_sql){document.getElementById("sqlDisplay").innerText=r.generated_sql;document.getElementById("sqlCard").style.display="block"}if(r.customer_reply){document.getElementById("adviceTitle").innerText="Customer Support Reply";document.getElementById("adviceDisplay").innerHTML=formatMarkdown(r.customer_reply);document.getElementById("adviceCard").style.display="block"}}}catch(i){console.error(i);alert("Error connecting to the analytical pipeline.")}finally{n.disabled=!1}}styleMap={bar:{borderColor:"#0d6efd",backgroundColor:"rgba(13,110,253,0.2)"},line:{borderColor:"#198754",backgroundColor:"rgba(25,135,84,0.1)",fill:!0},pie:{backgroundColor:["#0d6efd","#198754","#ffc107","#dc3545","#6f42c1"]}};function renderVisualization(e){if(!e)return;if("metric"===e.type){document.getElementById("metricTitle").innerText=e.label;document.getElementById("metricDisplay").innerText=e.value;document.getElementById("metricCard").style.display="block"}else if("chart"===e.type){const t=e.chart_style,n=document.getElementById("ctxChart").getContext("2d"),s=styleMap[t]||styleMap.bar;e.data.datasets=e.data.datasets.map(e=>({...e,...s}));chartInstance=new Chart(n,{type:t,data:e.data,options:{responsive:!0,maintainAspectRatio:!1}});document.getElementById("chartCard").style.display="block"}}</script>
 </body>
 </html>
