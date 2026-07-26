@@ -41,7 +41,6 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app
-      - ./documentation:/documentation
     working_dir: /app
     env_file:
       - .env
