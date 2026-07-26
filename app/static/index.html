@@ -18,15 +18,15 @@
 
         <div class="form-grid">
             <div class="form-group">
-                <label for="agentMode">Select Assistant Mode:</label>
+                <label for="agentMode">Select Agent Mode:</label>
                 <select id="agentMode">
-                    <option value="sql">Regular SQL Query (AgentSQL)</option>
-                    <option value="executive">Consulting Query (AgentConsulting)</option>
-                    <option value="customer">Support Query (AgentSupport)</option>
+                    <option value="sql">AgentSQL</option>
+                    <option value="executive">AgentConsulting</option>
+                    <option value="customer">AgentSupport</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="modelSelect">Select Local LLM Target:</label>
+                <label for="modelSelect">Select LLM:</label>
                 <select id="modelSelect">
                     <option value="">Loading system cache...</option>
                 </select>
@@ -34,7 +34,7 @@
         </div>
 
         <div class="form-group">
-            <label for="promptInput">Prompt Query:</label>
+            <label for="promptInput">Query:</label>
             <textarea id="promptInput" placeholder="System ready. Enter your prompt query above."></textarea>
         </div>
         <button id="askBtn" onclick="submitQuery()">Ask Agent</button>
