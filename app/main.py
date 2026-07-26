@@ -16,7 +16,7 @@ db_manager = DatabaseManager()
 agent_sql = AgentSQL()
 agent_consulting = AgentConsulting()
 # todo - the value of the arguments should be in the .env
-agent_support = AgentSupport(target_table="products", pdf_dir_path="./support_pdfs")
+agent_support = AgentSupport(target_table="products", pdf_dir_path="./documentation")
 
 
 @asynccontextmanager

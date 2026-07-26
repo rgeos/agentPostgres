@@ -14,7 +14,7 @@ class AgentSupport:
     """
 
     def __init__(
-        self, target_table: str = "products", pdf_dir_path: str = "./support_pdfs"
+        self, target_table: str = "products", pdf_dir_path: str = "/documentation"
     ):
         ollama_host = os.getenv("OLLAMA_HOST", "http://ollama:11434")
         self.client = ollama.Client(host=ollama_host)
