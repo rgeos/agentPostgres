@@ -72,21 +72,32 @@ class SQLGenerationAgent:
             except json.JSONDecodeError:
                 pass
 
-            # Stage 2: Check for standard key mapping syntax variants
-            json_match = re.search(r'"sql_query"\s*:\s*"([^"]+)"', raw_text, re.DOTALL)
-            if json_match:
-                return (
-                    json_match.group(1).replace('\\"', '"').replace("\n", " ").strip()
+            # Stage 2: Robust regex to extract whatever value sits inside the "sql_query" key
+            sql_json_match = re.search(
+                r'"sql_query"\s*:\s*"(.*?)"', raw_text, re.DOTALL | re.IGNORECASE
+            )
+            if sql_json_match:
+                extracted_sql = sql_json_match.group(1)
+                # Strip away escaped quotes, internal newlines, or accidental markdown wrappers
+                extracted_sql = (
+                    extracted_sql.replace('\\"', '"')
+                    .replace("\n", " ")
+                    .replace("```sql", "")
+                    .replace("```", "")
+                    .strip()
                 )
+                if "select" in extracted_sql.lower():
+                    return extracted_sql
 
-            # Stage 3: Look for raw SQL inside markdown code fence blocks
+            # Stage 3: Look for raw SQL inside markdown code fence blocks anywhere in the text
             markdown_match = re.search(
                 r"```(?:sql|json)?\s*(.*?)\s*```", raw_text, re.DOTALL | re.IGNORECASE
             )
             if markdown_match:
                 extracted_text = markdown_match.group(1)
+                # Check if there is an inner JSON string pattern
                 inner_json = re.search(
-                    r'"sql_query"\s*:\s*"([^"]+)"', extracted_text, re.DOTALL
+                    r'"sql_query"\s*:\s*"(.*?)"', extracted_text, re.DOTALL
                 )
                 if inner_json:
                     return (
@@ -138,7 +149,7 @@ class ResponseSynthesisAgent:
             response = self.client.generate(
                 model=model_name,
                 prompt=synthesis_prompt,
-                options={"temperature": 0.1, "num_ctx": 2048, "num_predict": 256},
+                options={"temperature": 0.0, "num_ctx": 2048, "num_predict": 256},
             )
             return response["response"]
         except Exception as e:
