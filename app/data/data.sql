@@ -14,14 +14,14 @@ grant select on all tables in schema isolated_analytics_schema to llm_reader;
 alter default privileges in schema isolated_analytics_schema grant select on tables to llm_reader;
 
 -- create some data
-create table products (
+create table isolated_analytics_schema.products (
     id serial primary key ,
-    product_name varchar(256),
-    product_price int,
-    stock_volume int
+    name varchar(256),
+    price int,
+    stock int
 );
 
-insert into products (product_name, product_price, stock_volume)
+insert into isolated_analytics_schema.products (name, price, stock)
 values
 ('apples', 10, 100),
 ('oranges', 15, 200),
