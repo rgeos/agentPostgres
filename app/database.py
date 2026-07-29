@@ -121,6 +121,9 @@ class DatabaseTool:
             "grant",
         ]
 
+        raw_tables = os.getenv("ALLOWED_TABLES", "products,orders")
+        self.allowed_tables = [t.strip() for t in raw_tables.split(",") if t.strip()]
+
     def get_connection(self):
         return psycopg2.connect(
             host=self.host,
@@ -138,7 +141,7 @@ class DatabaseTool:
         group_by_id_pattern = r"(?i)\s+group\s+by\s+([a-zA-Z0-9_\.]+)?\b(id)\b"
         if re.search(group_by_id_pattern, cleaned):
             print(
-                f"[SQL SANITIZER] Intercepted illegal primary key grouping clause inside: '{sql_query}'"
+                f"[SQL SANITIZER] Intercepted primary key grouping clause inside: '{sql_query}'"
             )
             cleaned = re.sub(group_by_id_pattern, "", cleaned)
             select_id_comma_pattern = r"(?i)select\s+(\w+\.)?id\s*,\s*"
@@ -161,13 +164,10 @@ class DatabaseTool:
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(sql_query)
-                columns = [
-                    desc[0] for desc in cursor.description
-                ]  # Extract simple string header keys
+                columns = [desc[0] for desc in cursor.description]
                 results = cursor.fetchall()
 
                 raw_records = [dict(zip(columns, row)) for row in results]
-                # Convert list to JSON string and back to safely process Decimal objects
                 json_str = json.dumps(raw_records, cls=DecimalEncoder)
                 return json.loads(json_str)
 

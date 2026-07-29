@@ -33,24 +33,30 @@ class SQLGenerationAgent:
         self.ollama_host = os.getenv("OLLAMA_HOST", "http://ollama:11434")
         self.target_schema = target_schema
         self.discoverer = SchemaDiscoverer()
+        self.db_tool = DatabaseTool()
 
     def generate_query(self, user_question: str, model_name: str) -> str | None:
         """Isolated pipeline to extract a valid SQL string, accelerated via static memory caches."""
         live_schema_context = self.discoverer.get_active_schema_documentation()
+
+        allowed_table_rules = ", ".join(
+            [f"'{self.target_schema}.{t}'" for t in self.db_tool.allowed_tables]
+        )
 
         system_instruction = (
             f"You are a machine translator. Translate the user query into a single valid PostgreSQL SELECT statement.\n\n"
             f"DATABASE SCHEMA MATRIX:\n"
             f"{live_schema_context}\n\n"
             f"RULES:\n"
-            f"- Use standard SQL tools where appropriate (e.g., SUM, COUNT, AVG).\n"
+            f"- Use standard SQL tools where appropriate (e.g., SUM, COUNT, AVG, JOIN).\n"
+            f"- You are ALLOWED and encouraged to use JOIN clauses to connect records from multiple tables if needed.\n"
             f"- Never write a 'GROUP BY id' clause.\n"
-            f"- You can ONLY query tables matching the prefix '{self.target_schema}.'\n\n"
-            f"include the corresponding text label/descriptive columns (like 'name') in your SELECT clause "
-            f"so the application can visualize the data.\n\n"
+            f"- You can ONLY query tables matching this prefix checklist: [{allowed_table_rules}]. Do not reference any other tables.\n\n"
+            f"Include corresponding descriptive columns (like 'name' or titles) in your SELECT clause "
+            f"so the application can properly visualize the combined data data arrays.\n\n"
             f"OUTPUT FORMAT:\n"
             f"You must output a raw JSON object matching exactly this structure, with no commentary:\n"
-            f'{{"sql_query": "SELECT ... FROM {self.target_schema}.products ..."}}'
+            f'{{"sql_query": "SELECT ... FROM {self.target_schema}.products JOIN {self.target_schema}.<other_allowed_table> ..."}}'
         )
 
         try:
