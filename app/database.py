@@ -124,7 +124,7 @@ class DatabaseTool:
         raw_tables = os.getenv("ALLOWED_TABLES", "products,orders")
         self.allowed_tables = [t.strip() for t in raw_tables.split(",") if t.strip()]
 
-        # we want deterministic answers
+        # we want deterministic answers - todo this does not really work
         try:
             self.seed = int(os.getenv("LLM_SEED", "0"))
         except ValueError:
