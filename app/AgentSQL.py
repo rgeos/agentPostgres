@@ -16,11 +16,22 @@ def _cached_llm_sql_call(
     """Isolated, hashable worker function that performs the slow Ollama call on CPU."""
     print(f"[CACHE MISS] Querying local LLM process registry for: '{question}'")
     client = ollama.Client(host=client_host)
+
+    try:
+        env_seed = int(os.getenv("LLM_SEED", "0"))
+    except (TypeError, ValueError):
+        env_seed = 0
+
     response = client.generate(
         model=model_name,
         prompt=f"System rules:\n{instruction}\n\nUser Question: {question}",
         format="json",
-        options={"temperature": 0.0, "num_ctx": 2048, "num_predict": 256},
+        options={
+            "temperature": 0.0,
+            "num_ctx": 2048,
+            "num_predict": 256,
+            "seed": env_seed,
+        },
     )
     return response["response"].strip()
 
