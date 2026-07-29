@@ -62,13 +62,28 @@ class SQLGenerationAgent:
                 question=user_question,
             )
 
-            # --- MULTI-STAGE EXTRACTOR LAYER ---
+            # Helper function to normalize text (remove markdown blocks, replace extra spaces, flatten newlines)
+            def clean_extracted_sql(sql_str: str) -> str:
+                # Remove nested markdown code blocks if present
+                sql_str = re.sub(
+                    r"```(?:sql)?\s*(.*?)\s*```",
+                    r"\1",
+                    sql_str,
+                    flags=re.DOTALL | re.IGNORECASE,
+                )
+                # Replace escaped quotes, internal newlines, or tabs with simple spaces
+                sql_str = (
+                    sql_str.replace('\\"', '"').replace("\n", " ").replace("\t", " ")
+                )
+                # Collapse multiple continuous spaces into one
+                sql_str = re.sub(r"\s+", " ", sql_str)
+                return sql_str.strip()
 
             # Stage 1: Try decoding the entire response as a direct JSON string map
             try:
                 parsed = json.loads(raw_text)
                 if parsed.get("sql_query"):
-                    return parsed["sql_query"].strip()
+                    return clean_extracted_sql(parsed["sql_query"])
             except json.JSONDecodeError:
                 pass
 
@@ -77,15 +92,7 @@ class SQLGenerationAgent:
                 r'"sql_query"\s*:\s*"(.*?)"', raw_text, re.DOTALL | re.IGNORECASE
             )
             if sql_json_match:
-                extracted_sql = sql_json_match.group(1)
-                # Strip away escaped quotes, internal newlines, or accidental markdown wrappers
-                extracted_sql = (
-                    extracted_sql.replace('\\"', '"')
-                    .replace("\n", " ")
-                    .replace("```sql", "")
-                    .replace("```", "")
-                    .strip()
-                )
+                extracted_sql = clean_extracted_sql(sql_json_match.group(1))
                 if "select" in extracted_sql.lower():
                     return extracted_sql
 
@@ -100,17 +107,14 @@ class SQLGenerationAgent:
                     r'"sql_query"\s*:\s*"(.*?)"', extracted_text, re.DOTALL
                 )
                 if inner_json:
-                    return (
-                        inner_json.group(1)
-                        .replace('\\"', '"')
-                        .replace("\n", " ")
-                        .strip()
-                    )
+                    return clean_extracted_sql(inner_json.group(1))
+
+                extracted_text = clean_extracted_sql(extracted_text)
                 if (
                     "select" in extracted_text.lower()
                     and "from" in extracted_text.lower()
                 ):
-                    return extracted_text.replace("\n", " ").strip()
+                    return extracted_text
 
             # Stage 4: Absolute fallback line scan
             clean_text = re.sub(r"[\{\}\[\]]", "", raw_text)
@@ -118,7 +122,7 @@ class SQLGenerationAgent:
                 r"(?i)\b(SELECT\s+.+?\s+FROM\s+.+?)(?:;|$)", clean_text, re.DOTALL
             )
             if sql_match:
-                return sql_match.group(1).replace("\n", " ").strip()
+                return clean_extracted_sql(sql_match.group(1))
 
             return None
         except Exception as e:
