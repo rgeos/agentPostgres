@@ -14,10 +14,16 @@ def _cached_llm_sql_call(
     """Isolated, hashable worker function that performs the slow Ollama call on CPU."""
     print(f"[CACHE MISS] Querying local LLM process registry for: '{question}'")
     client = ollama.Client(host=client_host)
+    sql_schema = {
+        "type": "object",
+        "properties": {"sql_query": {"type": "string"}},
+        "required": ["sql_query"],
+    }
+
     response = client.generate(
         model=model_name,
         prompt=f"System rules:\n{instruction}\n\nUser Question: {question}",
-        format="json",
+        format=sql_schema,  # FIX: Replaced "json" with a strict structural schema map
         options={"temperature": 0.0, "num_ctx": 2048, "num_predict": 256},
     )
     return response["response"].strip()
@@ -37,17 +43,15 @@ class SQLGenerationAgent:
         live_schema_context = self.discoverer.get_active_schema_documentation()
 
         system_instruction = (
-            f"You are a precise machine translator that outputs RAW JSON ONLY. Your sole purpose is to convert natural language queries into a single valid PostgreSQL SELECT statement.\n\n"
+            f"You are a machine translator. Translate the user query into a single valid PostgreSQL SELECT statement.\n\n"
             f"DATABASE SCHEMA MATRIX:\n"
             f"{live_schema_context}\n\n"
-            f"STRICT RULES:\n"
+            f"RULES:\n"
             f"- Use standard SQL tools where appropriate (e.g., SUM, COUNT, AVG).\n"
             f"- Never write a 'GROUP BY id' clause.\n"
-            f"- Only target schemas matching the prefix '{self.target_schema}.'\n"
-            f"- You MUST include a descriptive column (like 'name') in the SELECT target if aggregating data so the application can render a graph layout.\n\n"
-            f"JSON OUTPUT REQUIREMENTS:\n"
-            f"You must return a valid JSON object matching this structure exactly, with absolutely zero trailing commentary or context strings outside the object keys:\n"
-            f'{{"sql_query": "SELECT ... FROM {self.target_schema}.products ..."}}'
+            f"- You can ONLY query tables matching the prefix '{self.target_schema}.'\n\n"
+            f"Include the corresponding text label/descriptive columns (like 'name') in your SELECT clause "
+            f"so the application can visualize the data."
         )
 
         try:
@@ -59,27 +63,13 @@ class SQLGenerationAgent:
                 question=user_question,
             )
 
-            # Helper function to normalize text (remove markdown blocks, replace extra spaces, flatten newlines)
             def clean_extracted_sql(sql_str: str) -> str:
-                # Strip Qwen3.5 structural thinking blocks if they leak into text targets
-                sql_str = re.sub(r"<think>.*?</think>", "", sql_str, flags=re.DOTALL | re.IGNORECASE)
-
-                # Remove nested markdown code blocks if present
-                sql_str = re.sub(
-                    r"```(?:sql)?\s*(.*?)\s*```",
-                    r"\1",
-                    sql_str,
-                    flags=re.DOTALL | re.IGNORECASE,
-                )
-                # Replace escaped quotes, internal newlines, or tabs with simple spaces
                 sql_str = (
                     sql_str.replace('\\"', '"').replace("\n", " ").replace("\t", " ")
                 )
-                # Collapse multiple continuous spaces into one
                 sql_str = re.sub(r"\s+", " ", sql_str)
                 return sql_str.strip()
 
-            # Stage 1: Try decoding the entire response as a direct JSON string map
             try:
                 parsed = json.loads(raw_text)
                 if parsed.get("sql_query"):
@@ -87,44 +77,11 @@ class SQLGenerationAgent:
             except json.JSONDecodeError:
                 pass
 
-            # Stage 2: Robust regex to extract whatever value sits inside the "sql_query" key
             sql_json_match = re.search(
                 r'"sql_query"\s*:\s*"(.*?)"', raw_text, re.DOTALL | re.IGNORECASE
             )
             if sql_json_match:
-                extracted_sql = clean_extracted_sql(sql_json_match.group(1))
-                if "select" in extracted_sql.lower():
-                    return extracted_sql
-
-            # Stage 3: Look for raw SQL inside markdown code fence blocks anywhere in the text
-            markdown_match = re.search(
-                r"```(?:sql|json)?\s*(.*?)\s*```", raw_text, re.DOTALL | re.IGNORECASE
-            )
-            if markdown_match:
-                extracted_text = markdown_match.group(1)
-                # Check if there is an inner JSON string pattern
-                inner_json = re.search(
-                    r'"sql_query"\s*:\s*"(.*?)"', extracted_text, re.DOTALL
-                )
-                if inner_json:
-                    return clean_extracted_sql(inner_json.group(1))
-
-                extracted_text = clean_extracted_sql(extracted_text)
-                if (
-                    "select" in extracted_text.lower()
-                    and "from" in extracted_text.lower()
-                ):
-                    return extracted_text
-
-            # Stage 4: Absolute fallback line scan
-            clean_text = re.sub(r"[\{\}\[\]]", "", raw_text)
-            sql_match = re.search(
-                r"(?i)\b(SELECT\s+.+?\s+FROM\s+.+?)(?:;|$)", clean_text, re.DOTALL
-            )
-            if sql_match:
-                extracted_fallback = clean_extracted_sql(sql_match.group(1))
-                if "select" in extracted_fallback.lower() and "from" in extracted_fallback.lower():
-                    return extracted_fallback
+                return clean_extracted_sql(sql_json_match.group(1))
 
             return None
         except Exception as e:
