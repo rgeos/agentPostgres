@@ -8,22 +8,19 @@ from database import DatabaseTool, SchemaDiscoverer
 
 # --- GLOBAL STATIC ROUTING CACHE FOR CPU OPTIMIZATION ---
 @lru_cache(maxsize=256)
+@lru_cache(maxsize=256)
 def _cached_llm_sql_call(
-    client_host: str, model_name: str, instruction: str, question: str
+        client_host: str, model_name: str, instruction: str, question: str
 ) -> str:
     """Isolated, hashable worker function that performs the slow Ollama call on CPU."""
     print(f"[CACHE MISS] Querying local LLM process registry for: '{question}'")
     client = ollama.Client(host=client_host)
-    sql_schema = {
-        "type": "object",
-        "properties": {"sql_query": {"type": "string"}},
-        "required": ["sql_query"],
-    }
 
+    # Reverted to string "json" to fix the library literal_error completely
     response = client.generate(
         model=model_name,
         prompt=f"System rules:\n{instruction}\n\nUser Question: {question}",
-        format=sql_schema,  # FIX: Replaced "json" with a strict structural schema map
+        format="json",
         options={"temperature": 0.0, "num_ctx": 2048, "num_predict": 256},
     )
     return response["response"].strip()
@@ -43,19 +40,20 @@ class SQLGenerationAgent:
         live_schema_context = self.discoverer.get_active_schema_documentation()
 
         system_instruction = (
-            f"You are a machine translator. Translate the user query into a single valid PostgreSQL SELECT statement.\n\n"
+            f"You are a machine translation engine configured to emit JSON ONLY.\n"
+            f"Do not write conversational filler or markdown tags outside the JSON keys.\n\n"
             f"DATABASE SCHEMA MATRIX:\n"
             f"{live_schema_context}\n\n"
             f"RULES:\n"
             f"- Use standard SQL tools where appropriate (e.g., SUM, COUNT, AVG).\n"
             f"- Never write a 'GROUP BY id' clause.\n"
-            f"- You can ONLY query tables matching the prefix '{self.target_schema}.'\n\n"
-            f"Include the corresponding text label/descriptive columns (like 'name') in your SELECT clause "
-            f"so the application can visualize the data."
+            f"- You can ONLY query tables matching the prefix '{self.target_schema}.'\n"
+            f"- Include a descriptive text column (like 'name') in your SELECT clause.\n\n"
+            f"REQUIRED OUTPUT SCHEMA:\n"
+            f'{{"sql_query": "SELECT ... FROM {self.target_schema}.<table_name> ..."}}'
         )
 
         try:
-            # Route execution down through the hashable cache validator wrapper
             raw_text = _cached_llm_sql_call(
                 client_host=self.ollama_host,
                 model_name=model_name,
@@ -64,6 +62,7 @@ class SQLGenerationAgent:
             )
 
             def clean_extracted_sql(sql_str: str) -> str:
+                sql_str = re.sub(r"<think>.*?</think>", "", sql_str, flags=re.DOTALL | re.IGNORECASE)
                 sql_str = (
                     sql_str.replace('\\"', '"').replace("\n", " ").replace("\t", " ")
                 )
