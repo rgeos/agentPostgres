@@ -215,4 +215,4 @@ class SchemaDiscoverer:
                 f"[SCHEMA DISCOVERER ERROR] Could not extract live documentation data: {e}"
             )
             # Fix column headers to perfectly mirror your live schema tables
-            return f"- Table: {self.target_schema}.products -> Columns: [id (integer), product_name (character varying), product_price (numeric), stock_volume (integer)]"
+            return f"- Table: {self.target_schema}.products -> Columns: [id (integer), name (character varying), price (numeric), volume (integer)]"

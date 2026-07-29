@@ -37,17 +37,16 @@ class SQLGenerationAgent:
         live_schema_context = self.discoverer.get_active_schema_documentation()
 
         system_instruction = (
-            f"You are a machine translator. Translate the user query into a single valid PostgreSQL SELECT statement.\n\n"
+            f"You are a precise machine translator that outputs RAW JSON ONLY. Your sole purpose is to convert natural language queries into a single valid PostgreSQL SELECT statement.\n\n"
             f"DATABASE SCHEMA MATRIX:\n"
             f"{live_schema_context}\n\n"
-            f"RULES:\n"
+            f"STRICT RULES:\n"
             f"- Use standard SQL tools where appropriate (e.g., SUM, COUNT, AVG).\n"
             f"- Never write a 'GROUP BY id' clause.\n"
-            f"- You can ONLY query tables matching the prefix '{self.target_schema}.'\n\n"
-            f"include the corresponding text label/descriptive columns (like 'name') in your SELECT clause "
-            f"so the application can visualize the data.\n\n"
-            f"OUTPUT FORMAT:\n"
-            f"You must output a raw JSON object matching exactly this structure, with no commentary:\n"
+            f"- Only target schemas matching the prefix '{self.target_schema}.'\n"
+            f"- You MUST include a descriptive column (like 'name') in the SELECT target if aggregating data so the application can render a graph layout.\n\n"
+            f"JSON OUTPUT REQUIREMENTS:\n"
+            f"You must return a valid JSON object matching this structure exactly, with absolutely zero trailing commentary or context strings outside the object keys:\n"
             f'{{"sql_query": "SELECT ... FROM {self.target_schema}.products ..."}}'
         )
 
@@ -123,7 +122,9 @@ class SQLGenerationAgent:
                 r"(?i)\b(SELECT\s+.+?\s+FROM\s+.+?)(?:;|$)", clean_text, re.DOTALL
             )
             if sql_match:
-                return clean_extracted_sql(sql_match.group(1))
+                extracted_fallback = clean_extracted_sql(sql_match.group(1))
+                if "select" in extracted_fallback.lower() and "from" in extracted_fallback.lower():
+                    return extracted_fallback
 
             return None
         except Exception as e:
