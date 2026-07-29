@@ -180,7 +180,7 @@ def automated_collaboration_entrypoint(payload: IntentRouterRequest):
         return agent_consulting.run_collaboration(
             user_question=payload.question,
             agent_sql_instance=agent_sql,
-            selected_model=payload.model
+            selected_model=payload.model,
         )
 
     # Route 2: Support Query (AgentSupport Knowledge Fusion)
@@ -193,7 +193,6 @@ def automated_collaboration_entrypoint(payload: IntentRouterRequest):
 
     # Route 3: Regular SQL Query (AgentSQL Baseline Parser)
     return agent_sql.run_workflow(payload.question, selected_model=payload.model)
-
 
 
 if __name__ == "__main__":
