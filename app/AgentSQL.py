@@ -7,8 +7,6 @@ from database import DatabaseTool, SchemaDiscoverer
 
 
 # --- GLOBAL STATIC ROUTING CACHE FOR CPU OPTIMIZATION ---
-# Cache up to 256 unique natural language questions independently of class mutation states.
-# This prevents 'self' mutating elements from triggering unhashable type runtime errors.
 @lru_cache(maxsize=256)
 def _cached_llm_sql_call(
     client_host: str, model_name: str, instruction: str, question: str
@@ -64,6 +62,9 @@ class SQLGenerationAgent:
 
             # Helper function to normalize text (remove markdown blocks, replace extra spaces, flatten newlines)
             def clean_extracted_sql(sql_str: str) -> str:
+                # Strip Qwen3.5 structural thinking blocks if they leak into text targets
+                sql_str = re.sub(r"<think>.*?</think>", "", sql_str, flags=re.DOTALL | re.IGNORECASE)
+
                 # Remove nested markdown code blocks if present
                 sql_str = re.sub(
                     r"```(?:sql)?\s*(.*?)\s*```",
