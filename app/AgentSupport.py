@@ -3,7 +3,7 @@ import glob
 import json
 import ollama
 from pypdf import PdfReader
-from database import DatabaseTool, DecimalEncoder
+from Database import DatabaseTool, DecimalEncoder
 from AgentSQL import AgentSQL
 
 
@@ -18,7 +18,7 @@ class AgentSupport:
     ):
         ollama_host = os.getenv("OLLAMA_HOST", "http://ollama:11434")
         self.client = ollama.Client(host=ollama_host)
-        self.default_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b-instruct-q4_K_M")
+        self.default_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
         self.target_schema = os.getenv("TARGET_SCHEMA", "public_read_only")
 
         # Strict Boundary Declarations
