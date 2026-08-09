@@ -5,6 +5,14 @@ curl -X POST "http://localhost:8000/ask" \
      echo ""
 ```
 
+```text
+Questions to Consulting:
+What should I do to reduce my products stock based on the current orders?
+
+Questions to Support:
+Where is each and every product imported from?
+```
+
 ```bash
 curl -X GET "http://localhost:8000/health" \
      -H "Content-Type: application/json" 
@@ -23,3 +31,4 @@ grant select on all tables in schema isolated_analytics_schema to llm_reader;
 alter default privileges in schema isolated_analytics_schema grant select on tables to llm_reader;
 
 ```
+
