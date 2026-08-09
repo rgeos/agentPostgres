@@ -126,21 +126,32 @@ def status_check():
 
 @app.get("/debug/prompts")
 def inspect_active_prompts():
-    """Diagnostic route to verify cache state across all active files."""
-    files = {
+    """
+    Returns the real-time, pre-cached prompt strings currently
+    loaded inside the application memory core.
+    """
+    # Define the exact paths registered by your agents
+    target_prompts = {
         "consulting": "prompts/agent_consulting.txt",
         "sql": "prompts/agent_sql.txt",
         "synthesis": "prompts/response_synthesis.txt",
         "support": "prompts/agent_support.txt",
     }
-    return {
-        key: {
-            "path": path,
-            "is_cached": bool(watchdog.get_prompt(path)),
-            "char_count": len(watchdog.get_prompt(path)),
+
+    active_memory_dump = {}
+    for agent_key, file_path in target_prompts.items():
+        # Fetch the string template directly from the watchdog memory cache
+        cached_string = watchdog.get_prompt(file_path)
+
+        active_memory_dump[agent_key] = {
+            "source_file": file_path,
+            "character_count": len(cached_string),
+            "current_template_content": cached_string
+            if cached_string
+            else "[Empty / Not Loaded Yet]",
         }
-        for key, path in files.items()
-    }
+
+    return active_memory_dump
 
 
 # query agent
@@ -233,9 +244,9 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "main:app",
-        host=os.getenv("HOST", "0.0.0.0"),
-        port=int(os.getenv("PORT", 8000)),
-        reload=False,
-        workers=2,
-    )
+            "main:app",
+            host=os.getenv("HOST", "0.0.0.0"),
+            port=int(os.getenv("PORT", 8000)),
+            reload=False,
+            workers=2,
+        )
