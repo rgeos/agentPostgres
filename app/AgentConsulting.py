@@ -3,6 +3,7 @@ import json
 import ollama
 from Database import DatabaseTool, SchemaDiscoverer, DecimalEncoder
 from AgentSQL import SQLGenerationAgent
+from PromptWatchdog import watchdog
 
 
 class AgentConsulting:
@@ -15,10 +16,18 @@ class AgentConsulting:
             "CONSULTING_PROMPT_PATH", "prompts/agent_consulting.txt"
         )
 
+        fallback = "You are a consultant.\nCONTEXT:\n{schema_context}\nDATA:\n{db_rows_json}\nINQUIRY:\n{user_question}"
+        watchdog.register_prompt(
+            file_path=self.prompt_filepath,
+            required_keys=["schema_context", "db_rows_json", "user_question"],
+            fallback_text=fallback,
+        )
+
         self.db_tool = DatabaseTool()
         self.discoverer = SchemaDiscoverer()
         self.sql_worker = SQLGenerationAgent(self.client, self.target_schema)
 
+    # todo - remove if not needed
     def _load_prompt_template(self) -> str:
         """Loads prompt dynamically from file on every request execution."""
         try:
@@ -143,8 +152,8 @@ class AgentConsulting:
         schema_context: str,
         model_name: str,
     ) -> str:
-        # Dynamic template loading on each call
-        template = self._load_prompt_template()
+        # Instant memory load from pre-cached layout data
+        template = watchdog.get_prompt(self.prompt_filepath)
         consulting_prompt = template.format(
             schema_context=schema_context,
             db_rows_json=db_rows_json,

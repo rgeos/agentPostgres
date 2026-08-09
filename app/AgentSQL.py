@@ -4,6 +4,7 @@ import json
 import ollama
 from functools import lru_cache
 from Database import DatabaseTool, SchemaDiscoverer
+from PromptWatchdog import watchdog
 
 
 # --- GLOBAL STATIC ROUTING CACHE FOR CPU OPTIMIZATION ---
@@ -46,6 +47,18 @@ class SQLGenerationAgent:
         self.db_tool = DatabaseTool()
         self.prompt_filepath = os.getenv("SQL_PROMPT_PATH", "prompts/agent_sql.txt")
 
+        fallback = 'Translate query.\nSCHEMA:\n{live_schema_context}\nTABLES:\n{allowed_table_rules}\nFORMAT:\n{{"sql_query": "..."}}'
+        watchdog.register_prompt(
+            file_path=self.prompt_filepath,
+            required_keys=[
+                "live_schema_context",
+                "allowed_table_rules",
+                "target_schema",
+            ],
+            fallback_text=fallback,
+        )
+
+    # todo - remove if not needed
     def _load_prompt_template(self) -> str:
         try:
             with open(self.prompt_filepath, "r", encoding="utf-8") as f:
@@ -60,7 +73,7 @@ class SQLGenerationAgent:
             [f"'{self.target_schema}.{t}'" for t in self.db_tool.allowed_tables]
         )
 
-        template = self._load_prompt_template()
+        template = watchdog.get_prompt(self.prompt_filepath)
         system_instruction = template.format(
             live_schema_context=live_schema_context,
             allowed_table_rules=allowed_table_rules,

@@ -6,11 +6,15 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
+from sentry_sdk import worker
+
 from Database import DatabaseManager
 from AgentSQL import AgentSQL
 from viz import VisualizationHelper
 from AgentConsulting import AgentConsulting
 from AgentSupport import AgentSupport
+
+from PromptWatchdog import watchdog
 
 db_manager = DatabaseManager()
 agent_sql = AgentSQL()
@@ -198,4 +202,15 @@ def automated_collaboration_entrypoint(payload: IntentRouterRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    watchdog.start()
+
+    try:
+        uvicorn.run(
+            "main:app",
+            host=os.getenv("HOST", "0.0.0.0"),
+            port=int(os.getenv("PORT", 8000)),
+            reload=False,
+            workers=2,
+        )
+    finally:
+        watchdog.stop()
