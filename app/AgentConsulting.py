@@ -11,11 +11,24 @@ class AgentConsulting:
         self.client = ollama.Client(host=ollama_host)
         self.default_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
         self.target_schema = os.getenv("TARGET_SCHEMA", "public_read_only")
+        self.prompt_filepath = os.getenv(
+            "CONSULTING_PROMPT_PATH", "prompts/agent_consulting.txt"
+        )
 
-        # Reuse baseline ecosystem tools
         self.db_tool = DatabaseTool()
         self.discoverer = SchemaDiscoverer()
         self.sql_worker = SQLGenerationAgent(self.client, self.target_schema)
+
+    def _load_prompt_template(self) -> str:
+        """Loads prompt dynamically from file on every request execution."""
+        try:
+            with open(self.prompt_filepath, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            print(
+                f"[WARN] Failed loading consulting prompt file: {e}. Using structural fallback."
+            )
+            return "You are a consultant.\nCONTEXT:\n{schema_context}\nDATA:\n{db_rows_json}\nINQUIRY:\n{user_question}"
 
     def run_consulting_pipeline(
         self, user_question: str, selected_model: str | None = None
@@ -88,7 +101,7 @@ class AgentConsulting:
         active_model = selected_model if selected_model else self.default_model
 
         # 1. Delegate data gathering to AgentSQL
-        print(f"[COLLABORATION] Routing data gathering to AgentSQL")
+        print("[COLLABORATION] Routing data gathering to AgentSQL")
         sql_result = agent_sql_instance.run_workflow(
             user_question, selected_model=active_model
         )
@@ -107,7 +120,7 @@ class AgentConsulting:
         live_schema_context = self.discoverer.get_active_schema_documentation()
 
         # 3. AgentConsulting performs strategic synthesis
-        print(f"[COLLABORATION] Routing data to AgentConsulting for strategic advice")
+        print("[COLLABORATION] Routing data to AgentConsulting for strategic advice")
         strategic_advice = self._generate_advice(
             user_question=user_question,
             db_rows_json=clean_json_data,
@@ -130,17 +143,12 @@ class AgentConsulting:
         schema_context: str,
         model_name: str,
     ) -> str:
-        consulting_prompt = (
-            f"You are a Senior Retail Management Consultant. Synthesize the provided database records "
-            f"into actionable business insights for executives.\n\n"
-            f"CONTEXT SCHEMA ENVIRONMENT:\n{schema_context}\n\n"
-            f"RAW BUSINESS METRICS (JSON):\n{db_rows_json}\n\n"
-            f"EXECUTIVE INQUIRY: '{user_question}'\n\n"
-            f"INSTRUCTIONS:\n"
-            f"1. Directly answer the inquiry using exclusively the metrics provided above.\n"
-            f"2. Provide 2-3 specific business or inventory strategies (e.g., pricing optimization, restocking advice, capital allocation).\n"
-            f"3. Frame responses professionally. Bold key operational performance terms.\n"
-            f"4. Never mention database table structures, column definitions, or SQL phrasing to the executive."
+        # Dynamic template loading on each call
+        template = self._load_prompt_template()
+        consulting_prompt = template.format(
+            schema_context=schema_context,
+            db_rows_json=db_rows_json,
+            user_question=user_question,
         )
 
         try:
@@ -153,7 +161,8 @@ class AgentConsulting:
         except Exception as e:
             return f"Strategic analysis compilation failure: {str(e)}"
 
-    def _format_error_payload(self, model: str, sql: str | None, message: str) -> dict:
+    @staticmethod
+    def _format_error_payload(model: str, sql: str | None, message: str) -> dict:
         """Standardizes edge-case handling across structural barriers."""
         return {
             "success": False,

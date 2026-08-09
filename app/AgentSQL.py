@@ -7,8 +7,6 @@ from Database import DatabaseTool, SchemaDiscoverer
 
 
 # --- GLOBAL STATIC ROUTING CACHE FOR CPU OPTIMIZATION ---
-# Cache up to 256 unique natural language questions independently of class mutation states.
-# This prevents 'self' mutating elements from triggering unhashable type runtime errors.
 @lru_cache(maxsize=256)
 def _cached_llm_sql_call(
     client_host: str, model_name: str, instruction: str, question: str
@@ -17,6 +15,7 @@ def _cached_llm_sql_call(
     print(f"[CACHE MISS] Querying local LLM process registry for: '{question}'")
     client = ollama.Client(host=client_host)
 
+    # this seed really working???
     try:
         env_seed = int(os.getenv("LLM_SEED", "0"))
     except (TypeError, ValueError):
@@ -45,33 +44,30 @@ class SQLGenerationAgent:
         self.target_schema = target_schema
         self.discoverer = SchemaDiscoverer()
         self.db_tool = DatabaseTool()
+        self.prompt_filepath = os.getenv("SQL_PROMPT_PATH", "prompts/agent_sql.txt")
+
+    def _load_prompt_template(self) -> str:
+        try:
+            with open(self.prompt_filepath, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            return 'Translate user query to SQL.\nSCHEMA:\n{live_schema_context}\nTABLES:\n{allowed_table_rules}\nFORMAT:\n{{"sql_query": "..."}}'
 
     def generate_query(self, user_question: str, model_name: str) -> str | None:
         """Isolated pipeline to extract a valid SQL string, accelerated via static memory caches."""
         live_schema_context = self.discoverer.get_active_schema_documentation()
-
         allowed_table_rules = ", ".join(
             [f"'{self.target_schema}.{t}'" for t in self.db_tool.allowed_tables]
         )
 
-        system_instruction = (
-            f"You are a machine translator. Translate the user query into a single valid PostgreSQL SELECT statement.\n\n"
-            f"DATABASE SCHEMA MATRIX:\n"
-            f"{live_schema_context}\n\n"
-            f"RULES:\n"
-            f"- Use standard SQL tools where appropriate (e.g., SUM, COUNT, AVG, JOIN).\n"
-            f"- You are ALLOWED and encouraged to use JOIN clauses to connect records from multiple tables if needed.\n"
-            f"- Never write a 'GROUP BY id' clause.\n"
-            f"- You can ONLY query tables matching this prefix checklist: [{allowed_table_rules}]. Do not reference any other tables.\n\n"
-            f"Include corresponding descriptive columns (like 'name' or titles) in your SELECT clause "
-            f"so the application can properly visualize the combined data data arrays.\n\n"
-            f"OUTPUT FORMAT:\n"
-            f"You must output a raw JSON object matching exactly this structure, with no commentary:\n"
-            f'{{"sql_query": "SELECT ... FROM {self.target_schema}.products JOIN {self.target_schema}.<other_allowed_table> ..."}}'
+        template = self._load_prompt_template()
+        system_instruction = template.format(
+            live_schema_context=live_schema_context,
+            allowed_table_rules=allowed_table_rules,
+            target_schema=self.target_schema,
         )
 
         try:
-            # Route execution down through the hashable cache validator wrapper
             raw_text = _cached_llm_sql_call(
                 client_host=self.ollama_host,
                 model_name=model_name,
@@ -79,24 +75,19 @@ class SQLGenerationAgent:
                 question=user_question,
             )
 
-            # Helper function to normalize text (remove markdown blocks, replace extra spaces, flatten newlines)
             def clean_extracted_sql(sql_str: str) -> str:
-                # Remove nested markdown code blocks if present
                 sql_str = re.sub(
                     r"```(?:sql)?\s*(.*?)\s*```",
                     r"\1",
                     sql_str,
                     flags=re.DOTALL | re.IGNORECASE,
                 )
-                # Replace escaped quotes, internal newlines, or tabs with simple spaces
                 sql_str = (
                     sql_str.replace('\\"', '"').replace("\n", " ").replace("\t", " ")
                 )
-                # Collapse multiple continuous spaces into one
                 sql_str = re.sub(r"\s+", " ", sql_str)
                 return sql_str.strip()
 
-            # Stage 1: Try decoding the entire response as a direct JSON string map
             try:
                 parsed = json.loads(raw_text)
                 if parsed.get("sql_query"):
@@ -104,7 +95,6 @@ class SQLGenerationAgent:
             except json.JSONDecodeError:
                 pass
 
-            # Stage 2: Robust regex to extract whatever value sits inside the "sql_query" key
             sql_json_match = re.search(
                 r'"sql_query"\s*:\s*"(.*?)"', raw_text, re.DOTALL | re.IGNORECASE
             )
@@ -113,13 +103,11 @@ class SQLGenerationAgent:
                 if "select" in extracted_sql.lower():
                     return extracted_sql
 
-            # Stage 3: Look for raw SQL inside markdown code fence blocks anywhere in the text
             markdown_match = re.search(
                 r"```(?:sql|json)?\s*(.*?)\s*```", raw_text, re.DOTALL | re.IGNORECASE
             )
             if markdown_match:
                 extracted_text = markdown_match.group(1)
-                # Check if there is an inner JSON string pattern
                 inner_json = re.search(
                     r'"sql_query"\s*:\s*"(.*?)"', extracted_text, re.DOTALL
                 )
@@ -133,7 +121,6 @@ class SQLGenerationAgent:
                 ):
                     return extracted_text
 
-            # Stage 4: Absolute fallback line scan
             clean_text = re.sub(r"[\{\}\[\]]", "", raw_text)
             sql_match = re.search(
                 r"(?i)\b(SELECT\s+.+?\s+FROM\s+.+?)(?:;|$)", clean_text, re.DOTALL
@@ -152,18 +139,23 @@ class ResponseSynthesisAgent:
 
     def __init__(self, client: ollama.Client):
         self.client = client
+        self.prompt_filepath = os.getenv(
+            "SYNTHESIS_PROMPT_PATH", "prompts/response_synthesis.txt"
+        )
+
+    def _load_prompt_template(self) -> str:
+        try:
+            with open(self.prompt_filepath, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            return "Answer using records.\nQUESTION:\n{user_question}\nRECORDS:\n{db_rows_json}"
 
     def _generate_advice(
         self, user_question: str, db_rows_json: str, model_name: str
     ) -> str:
-        synthesis_prompt = (
-            f"You are a factual reporting clerk. Answer the user's question using ONLY the provided database rows.\n\n"
-            f"User Question: '{user_question}'\n"
-            f"Factual Database Records (JSON format):\n{db_rows_json}\n\n"
-            f"INSTRUCTIONS:\n"
-            f"1. Summarise these database records into a direct, friendly natural language response.\n"
-            f"2. Your answer must align 100% with the numbers and names listed in the records above.\n"
-            f"3. Do not invent details, hallucinate items, or refer to any tables or SQL syntax structures."
+        template = self._load_prompt_template()
+        synthesis_prompt = template.format(
+            user_question=user_question, db_rows_json=db_rows_json
         )
 
         try:
@@ -193,7 +185,6 @@ class AgentSQL:
     def run_workflow(
         self, user_question: str, selected_model: str | None = None
     ) -> dict:
-        """Runs the multi-agent pipeline using either the user-selected or default model target."""
         active_model = selected_model if selected_model else self.default_model
         print(
             f"[ORCHESTRATOR] Initializing execution pipeline targeting model: '{active_model}'"
