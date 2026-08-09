@@ -3,7 +3,7 @@ import re
 import json
 import ollama
 from functools import lru_cache
-from database import DatabaseTool, SchemaDiscoverer
+from Database import DatabaseTool, SchemaDiscoverer
 
 
 # --- GLOBAL STATIC ROUTING CACHE FOR CPU OPTIMIZATION ---

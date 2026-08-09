@@ -1,7 +1,7 @@
 import os
 import json
 import ollama
-from database import DatabaseTool, SchemaDiscoverer, DecimalEncoder
+from Database import DatabaseTool, SchemaDiscoverer, DecimalEncoder
 from AgentSQL import SQLGenerationAgent
 
 

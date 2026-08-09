@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-from database import DatabaseManager
+from Database import DatabaseManager
 from AgentSQL import AgentSQL
 from viz import VisualizationHelper
 from AgentConsulting import AgentConsulting

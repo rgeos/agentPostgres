@@ -3,7 +3,7 @@ import glob
 import json
 import ollama
 from pypdf import PdfReader
-from database import DatabaseTool, DecimalEncoder
+from Database import DatabaseTool, DecimalEncoder
 from AgentSQL import AgentSQL
 
 
