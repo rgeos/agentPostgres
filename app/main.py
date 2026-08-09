@@ -7,27 +7,40 @@ from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
 from Database import DatabaseManager
-from AgentSQL import AgentSQL
 from viz import VisualizationHelper
+from AgentSQL import AgentSQL
 from AgentConsulting import AgentConsulting
 from AgentSupport import AgentSupport
 
 from PromptWatchdog import watchdog
 
 db_manager = DatabaseManager()
-agent_sql = AgentSQL()
-agent_consulting = AgentConsulting()
+# agent_sql = AgentSQL()
+# agent_consulting = AgentConsulting()
 # todo - the value of the arguments should be in the .env
-agent_support = AgentSupport(target_table="products", pdf_dir_path="./documentation")
+# agent_support = AgentSupport(target_table="products", pdf_dir_path="./documentation")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Verifying internal microservice connectivity configurations...")
+    watchdog.start()
     time.sleep(5)
     db_manager.initialize_environment()
+    global agent_sql, agent_consulting, agent_support
+
+    agent_sql = AgentSQL()
+    agent_consulting = AgentConsulting()
+    agent_support = AgentSupport()
+
     yield
     print("Tearing down API runtime context...")
+    watchdog.stop()
+
+
+agent_sql = None
+agent_consulting = None
+agent_support = None
 
 
 app = FastAPI(
@@ -113,32 +126,21 @@ def status_check():
 
 @app.get("/debug/prompts")
 def inspect_active_prompts():
-    """
-    Returns the real-time, pre-cached prompt strings currently
-    loaded inside the application memory core.
-    """
-    # Define the exact paths registered by your agents
-    target_prompts = {
+    """Diagnostic route to verify cache state across all active files."""
+    files = {
         "consulting": "prompts/agent_consulting.txt",
         "sql": "prompts/agent_sql.txt",
         "synthesis": "prompts/response_synthesis.txt",
         "support": "prompts/agent_support.txt",
     }
-
-    active_memory_dump = {}
-    for agent_key, file_path in target_prompts.items():
-        # Fetch the string template directly from the watchdog memory cache
-        cached_string = watchdog.get_prompt(file_path)
-
-        active_memory_dump[agent_key] = {
-            "source_file": file_path,
-            "character_count": len(cached_string),
-            "current_template_content": cached_string
-            if cached_string
-            else "[Empty / Not Loaded Yet]",
+    return {
+        key: {
+            "path": path,
+            "is_cached": bool(watchdog.get_prompt(path)),
+            "char_count": len(watchdog.get_prompt(path)),
         }
-
-    return active_memory_dump
+        for key, path in files.items()
+    }
 
 
 # query agent
@@ -230,15 +232,10 @@ def automated_collaboration_entrypoint(payload: IntentRouterRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    watchdog.start()
-
-    try:
-        uvicorn.run(
-            "main:app",
-            host=os.getenv("HOST", "0.0.0.0"),
-            port=int(os.getenv("PORT", 8000)),
-            reload=False,
-            workers=2,
-        )
-    finally:
-        watchdog.stop()
+    uvicorn.run(
+        "main:app",
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", 8000)),
+        reload=False,
+        workers=2,
+    )
