@@ -6,8 +6,6 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-from sentry_sdk import worker
-
 from Database import DatabaseManager
 from AgentSQL import AgentSQL
 from viz import VisualizationHelper
