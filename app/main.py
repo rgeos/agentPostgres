@@ -78,7 +78,7 @@ def read_dashboard_root():
         return f.read()
 
 
-@app.get("/health")
+@app.get("/debug/health")
 def status_check():
     try:
         conn = db_manager.get_admin_connection()
@@ -109,6 +109,36 @@ def status_check():
             "locally_cached_models": available_models,
         },
     }
+
+
+@app.get("/debug/prompts")
+def inspect_active_prompts():
+    """
+    Returns the real-time, pre-cached prompt strings currently
+    loaded inside the application memory core.
+    """
+    # Define the exact paths registered by your agents
+    target_prompts = {
+        "consulting": "prompts/agent_consulting.txt",
+        "sql": "prompts/agent_sql.txt",
+        "synthesis": "prompts/response_synthesis.txt",
+        "support": "prompts/agent_support.txt",
+    }
+
+    active_memory_dump = {}
+    for agent_key, file_path in target_prompts.items():
+        # Fetch the string template directly from the watchdog memory cache
+        cached_string = watchdog.get_prompt(file_path)
+
+        active_memory_dump[agent_key] = {
+            "source_file": file_path,
+            "character_count": len(cached_string),
+            "current_template_content": cached_string
+            if cached_string
+            else "[Empty / Not Loaded Yet]",
+        }
+
+    return active_memory_dump
 
 
 # query agent
