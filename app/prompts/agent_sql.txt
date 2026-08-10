@@ -16,7 +16,7 @@ You must output a raw JSON object matching exactly this structure, with no comme
 {{"sql_query": "SELECT ... FROM {target_schema}.products JOIN {target_schema}.<other_allowed_table> ..."}}
 
 
-Table: public_read_only.transactions
+Table: {target_schema}.transactions
 Columns:
 - id (integer)
 - created_on (timestamp without time zone)
@@ -48,7 +48,7 @@ SELECT
 t.id,
 (item->>'productId') AS product_id,
 (item->>'quantity')::integer AS qty
-FROM public_read_only.transactions t,
+FROM {target_schema}.transactions t,
 LATERAL jsonb_array_elements(t.information->'items') AS item;
 3. Mathematical Casting: Wrap queries calculating totals in numeric wrappers:
 SUM((information->>'amount')::numeric)
