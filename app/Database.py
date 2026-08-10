@@ -55,6 +55,20 @@ class DatabaseManager:
                     )
 
                     cursor.execute(
+                        f"""
+                        CREATE TABLE IF NOT EXISTS {self.schema}.transactions (
+                            id SERIAL PRIMARY KEY,
+                            created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            information JSONB
+                        );
+                    """
+                    )
+
+                    cursor.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_transactions_info_gin ON {self.schema}.transactions USING gin (information);"
+                    )
+
+                    cursor.execute(
                         f"CREATE INDEX IF NOT EXISTS idx_products_name_trgm ON {self.schema}.products USING gin (name gin_trgm_ops);"
                     )
 

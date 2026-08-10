@@ -46,6 +46,9 @@ class SQLGenerationAgent:
         self.discoverer = SchemaDiscoverer()
         self.db_tool = DatabaseTool()
         self.prompt_filepath = os.getenv("SQL_PROMPT_PATH", "prompts/agent_sql.txt")
+        self.jsonb_schema_filepath = os.getenv(
+            "TRANSACTION_SCHEMA_PATH", "prompts/transaction_schema.txt"
+        )
 
         fallback = 'Translate query.\nSCHEMA:\n{live_schema_context}\nTABLES:\n{allowed_table_rules}\nFORMAT:\n{{"sql_query": "..."}}'
         watchdog.register_prompt(
@@ -56,6 +59,12 @@ class SQLGenerationAgent:
                 "target_schema",
             ],
             fallback_text=fallback,
+        )
+
+        watchdog.register_prompt(
+            file_path=self.jsonb_schema_filepath,
+            required_keys=[],  # None strictly required unless you pass layout formatting keys
+            fallback_text="Table: public_read_only.transactions -> Columns: [id, created_on (timestamp), information (jsonb)]",
         )
 
     # todo - remove if not needed
@@ -69,13 +78,17 @@ class SQLGenerationAgent:
     def generate_query(self, user_question: str, model_name: str) -> str | None:
         """Isolated pipeline to extract a valid SQL string, accelerated via static memory caches."""
         live_schema_context = self.discoverer.get_active_schema_documentation()
+        jsonb_schema_rules = watchdog.get_prompt(self.jsonb_schema_filepath)
+
+        extended_schema_context = f"{live_schema_context}\n\n{jsonb_schema_rules}"
+
         allowed_table_rules = ", ".join(
             [f"'{self.target_schema}.{t}'" for t in self.db_tool.allowed_tables]
         )
 
         template = watchdog.get_prompt(self.prompt_filepath)
         system_instruction = template.format(
-            live_schema_context=live_schema_context,
+            live_schema_context=extended_schema_context,
             allowed_table_rules=allowed_table_rules,
             target_schema=self.target_schema,
         )
