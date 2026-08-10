@@ -27,17 +27,6 @@ class AgentConsulting:
         self.discoverer = SchemaDiscoverer()
         self.sql_worker = SQLGenerationAgent(self.client, self.target_schema)
 
-    # todo - remove if not needed
-    def _load_prompt_template(self) -> str:
-        """Loads prompt dynamically from file on every request execution."""
-        try:
-            with open(self.prompt_filepath, "r", encoding="utf-8") as f:
-                return f.read()
-        except Exception as e:
-            print(
-                f"[WARN] Failed loading consulting prompt file: {e}. Using structural fallback."
-            )
-            return "You are a consultant.\nCONTEXT:\n{schema_context}\nDATA:\n{db_rows_json}\nINQUIRY:\n{user_question}"
 
     def run_consulting_pipeline(
         self, user_question: str, selected_model: str | None = None
