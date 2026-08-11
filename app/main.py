@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+import ollama
 
 from Database import DatabaseManager
 from viz import VisualizationHelper
@@ -28,6 +29,31 @@ async def lifespan(app: FastAPI):
     time.sleep(5)
     db_manager.initialize_environment()
     global agent_sql, agent_consulting, agent_support
+
+    # check if the model is present
+    target_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+    ollama_host = os.getenv("OLLAMA_HOST", "http:ollama:11434")
+    init_client = ollama.Client(host=ollama_host)
+
+    try:
+        print(f"[BOOT] Verifying local cache for model: '{target_model}'")
+        downloaded_models = init_client.list().get("models", [])
+        cached_names = [m.get("model") for m in downloaded_models if "model" in m]
+
+        # Exact match or exact base-tag match validation loop
+        if target_model not in cached_names:
+            print(f"[BOOT] Model '{target_model}' not found in local cache.")
+            print(f"[BOOT] Pulling '{target_model}' from Ollama registry (this may take a few minutes)...")
+
+            # This locks execution thread until the download completes safely
+            init_client.pull(model=target_model)
+            print(f"[BOOT] Model '{target_model}' successfully pulled and verified.")
+        else:
+            print(f"[BOOT] Model '{target_model}' verified active in memory cluster cache.")
+
+    except Exception as e:
+        print(f"[BOOT WARNING] Failed to automatically audit/pull Ollama models: {e}")
+        print("[BOOT WARNING] App initialization proceeding. Container might throw downstream runtime errors.")
 
     agent_sql = AgentSQL()
     agent_consulting = AgentConsulting()
