@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import datetime
 import ollama
 from functools import lru_cache
 from Database import DatabaseTool, SchemaDiscoverer
@@ -219,6 +220,13 @@ class AgentSQL:
         self.sql_generation_worker = SQLGenerationAgent(self.client, self.target_schema)
         self.synthesis_worker = ResponseSynthesisAgent(self.client)
 
+    @staticmethod
+    def _datetime_encoder(obj):
+        """Custom handler for serialising dates and times safely inside json.dumps()."""
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
     def run_workflow(
         self, user_question: str, selected_model: str | None = None
     ) -> dict:
@@ -242,11 +250,14 @@ class AgentSQL:
 
         try:
             tool_output_parsed = self.db_tool.execute_read_query_raw(generated_sql)
+            cleanly.clean_json_payload = json.dumps(
+                tool_output_parsed, default=self._datetime_encoder
+            )
         except Exception as e:
             return {
                 "tool_called": True,
                 "generated_sql": generated_sql,
-                "answer": f"Database execution halted due to system permissions rules: {str(e)}",
+                "answer": f"Database execution halted due to system serialization rules: {str(e)}",
                 "raw_db_rows": None,
                 "active_model": active_model,
             }
@@ -259,12 +270,9 @@ class AgentSQL:
                 "raw_db_rows": [],
                 "active_model": active_model,
             }
-
-        clean_json_payload = json.dumps(tool_output_parsed)
         final_answer = self.synthesis_worker._generate_advice(
             user_question, clean_json_payload, model_name=active_model
         )
-
         return {
             "tool_called": True,
             "generated_sql": generated_sql,
