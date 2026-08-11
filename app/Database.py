@@ -5,13 +5,23 @@ from decimal import Decimal
 import psycopg2
 
 
+import os
+import re
+import json
+import datetime
+from decimal import Decimal
+import psycopg2
+
 class DecimalEncoder(json.JSONEncoder):
-    """Custom JSON encoder to safely handle PostgreSQL Decimal data types."""
+    """Custom JSON encoder to safely handle PostgreSQL Decimal and DateTime data types."""
 
     def default(self, obj):
         if isinstance(obj, Decimal):
             return float(obj)
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
         return super(DecimalEncoder, self).default(obj)
+
 
 
 class DatabaseManager:
