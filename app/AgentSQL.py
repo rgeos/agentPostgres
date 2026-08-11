@@ -2,6 +2,7 @@ import os
 import re
 import json
 import datetime
+from decimal import Decimal
 import ollama
 from functools import lru_cache
 from Database import DatabaseTool, SchemaDiscoverer
@@ -221,6 +222,19 @@ class AgentSQL:
         self.synthesis_worker = ResponseSynthesisAgent(self.client)
 
     @staticmethod
+    def _sanitize_data(data):
+        """Recursively converts datetimes and Decimals into standard primitives."""
+        if isinstance(data, dict):
+            return {k: AgentSQL._sanitize_data(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [AgentSQL._sanitize_data(item) for item in data]
+        elif isinstance(data, (datetime.datetime, datetime.date)):
+            return data.isoformat()
+        elif isinstance(data, Decimal):
+            return float(data)
+        return data
+
+    @staticmethod
     def _datetime_encoder(obj):
         """Custom handler for serialising dates and times safely inside json.dumps()."""
         if isinstance(obj, (datetime.datetime, datetime.date)):
@@ -249,8 +263,9 @@ class AgentSQL:
             }
 
         try:
-            tool_output_parsed = self.db_tool.execute_read_query_raw(generated_sql)
-            cleanly.clean_json_payload = json.dumps(
+            raw_output = self.db_tool.execute_read_query_raw(generated_sql)
+            tool_output_parsed = self._sanitize_data(raw_output)
+            clean_json_payload = json.dumps(
                 tool_output_parsed, default=self._datetime_encoder
             )
         except Exception as e:
@@ -270,9 +285,11 @@ class AgentSQL:
                 "raw_db_rows": [],
                 "active_model": active_model,
             }
+
         final_answer = self.synthesis_worker._generate_advice(
             user_question, clean_json_payload, model_name=active_model
         )
+
         return {
             "tool_called": True,
             "generated_sql": generated_sql,
