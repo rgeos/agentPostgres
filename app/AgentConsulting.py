@@ -27,7 +27,6 @@ class AgentConsulting:
         self.discoverer = SchemaDiscoverer()
         self.sql_worker = SQLGenerationAgent(self.client, self.target_schema)
 
-
     def run_consulting_pipeline(
         self, user_question: str, selected_model: str | None = None
     ) -> dict:
