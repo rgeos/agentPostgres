@@ -12,6 +12,7 @@ import datetime
 from decimal import Decimal
 import psycopg2
 
+
 class DecimalEncoder(json.JSONEncoder):
     """Custom JSON encoder to safely handle PostgreSQL Decimal and DateTime data types."""
 
@@ -21,7 +22,6 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(obj, (datetime.datetime, datetime.date)):
             return obj.isoformat()
         return super(DecimalEncoder, self).default(obj)
-
 
 
 class DatabaseManager:
