@@ -15,40 +15,43 @@ OUTPUT FORMAT:
 You must output a raw JSON object matching exactly this structure, with no commentary:
 {{"sql_query": "SELECT ... FROM {target_schema}.products JOIN {target_schema}.<other_allowed_table> ..."}}
 
-
 Table: {target_schema}.transactions
 Columns:
 - id (integer)
 - created_on (timestamp without time zone)
 - information (jsonb) -> Deep Nested JSON Structure
 
-JSONB 'information' Schema Breakdown & Access Paths:
+JSONB Column Schema Structure ('information')
+{
+  "items": [
+    {
+      "price": 7176.75,
+      "quantity": 806,
+      "productId": 1,
+      "productName": "est laborum consectetur adipisicing tempor"
+    },
+    {
+      "price": 1547.51,
+      "quantity": 647,
+      "productId": 2,
+      "productName": "nulla deserunt do culpa veniam"
+    }
+  ],
+  "amount": 2,
+  "status": "SHIPPED",
+  "orderId": 39449732,
+  "customerName": "non fugiat eiusmod laborum",
+  "shippingAddress": {
+    "city": "Tokyo",
+    "street": "do ipsum eiusmod",
+    "zipcode": "anim"
+  }
+}
 
-* Order Identifier: (information->>'orderId')::bigint
-* Customer Name: information->>'customerName'
-* Financial Amount: (information->>'amount')::numeric
-* Fulfillment Status: information->>'status'
-* Shipping Address (Nested Object): information->'shippingAddress'
-  * City Name: information->'shippingAddress'->>'city'
-  * Street Address: information->'shippingAddress'->>'street'
-  * Postal Zip Code: information->'shippingAddress'->>'zipcode'
-* Purchase Items (Nested JSON Array): information->'items'
-  * Accessing an element by index (e.g., first item): information->'items'->0
-  * Nested Array Fields (Requires indexing or array expansion):
-    * Product ID String: information->'items'->0->>'productId'
-    * Product Name String: information->'items'->0->>'productName'
-    * Item Unit Price: (information->'items'->0->>'price')::numeric
-    * Item Quantity: (information->'items'->0->>'quantity')::integer
-
-PostgreSQL JSONB Query Rules & Syntax Examples:
-
-1. Scalar Extraction: Always use the '->>' operator to pull a field out as raw text before casting.
-2. Unpacking Arrays: To query or aggregate items across all rows, expand the JSON array using 'jsonb_array_elements':
-SELECT
-t.id,
-(item->>'productId') AS product_id,
-(item->>'quantity')::integer AS qty
-FROM {target_schema}.transactions t,
-LATERAL jsonb_array_elements(t.information->'items') AS item;
-3. Mathematical Casting: Wrap queries calculating totals in numeric wrappers:
-SUM((information->>'amount')::numeric)
+CRITICAL RULES FOR ARRAYS
+- Never use '->> 0' to read list items, as this only extracts the first element.
+- To fully expand and flatten JSONB arrays into distinct rows, use a CROSS JOIN with jsonb_to_recordset().
+- Example Query to expand the items array:
+  SELECT t.id, t.created_on, item.product_id, item.quantity, item.price
+  FROM public_read_only.transactions t
+  CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS item(product_id INT, quantity INT, price NUMERIC);

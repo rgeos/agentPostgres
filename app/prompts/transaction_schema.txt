@@ -10,13 +10,13 @@ JSONB Column Schema Structure ('information')
     {
       "price": 7176.75,
       "quantity": 806,
-      "productId": "magna id pariatur non",
+      "productId": 1,
       "productName": "est laborum consectetur adipisicing tempor"
     },
     {
       "price": 1547.51,
       "quantity": 647,
-      "productId": "consequat sint enim ut deserunt",
+      "productId": 2,
       "productName": "nulla deserunt do culpa veniam"
     }
   ],
@@ -30,24 +30,6 @@ JSONB Column Schema Structure ('information')
     "zipcode": "anim"
   }
 }
-
-JSONB 'information' Schema Breakdown & Access Paths:
-
-* Order Identifier: (information->>'orderId')::bigint
-* Customer Name: information->>'customerName'
-* Financial Amount: (information->>'amount')::numeric
-* Fulfillment Status: information->>'status'
-* Shipping Address (Nested Object): information->'shippingAddress'
-  * City Name: information->'shippingAddress'->>'city'
-  * Street Address: information->'shippingAddress'->>'street'
-  * Postal Zip Code: information->'shippingAddress'->>'zipcode'
-* Purchase Items (Nested JSON Array): information->'items'
-  * Accessing an element by index (e.g., first item): information->'items'->0
-  * Nested Array Fields (Requires indexing or array expansion):
-    * Product ID String: information->'items'->0->>'productId'
-    * Product Name String: information->'items'->0->>'productName'
-    * Item Unit Price: (information->'items'->0->>'price')::numeric
-    * Item Quantity: (information->'items'->0->>'quantity')::integer
 
 CRITICAL RULES FOR ARRAYS
 - Never use '->> 0' to read list items, as this only extracts the first element.
