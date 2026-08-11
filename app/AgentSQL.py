@@ -1,6 +1,8 @@
 import os
 import re
 import json
+import datetime
+from decimal import Decimal
 import ollama
 from functools import lru_cache
 from Database import DatabaseTool, SchemaDiscoverer
@@ -28,8 +30,8 @@ def _cached_llm_sql_call(
         format="json",
         options={
             "temperature": 0.0,
-            "num_ctx": 2048,
-            "num_predict": 256,
+            "num_ctx": 4096,  # Expanded context to safely process JSONB layout structures
+            "num_predict": 512,  # Expanded response scope for longer CROSS JOIN queries
             "seed": env_seed,
         },
     )
@@ -46,8 +48,16 @@ class SQLGenerationAgent:
         self.discoverer = SchemaDiscoverer()
         self.db_tool = DatabaseTool()
         self.prompt_filepath = os.getenv("SQL_PROMPT_PATH", "prompts/agent_sql.txt")
+        self.jsonb_schema_filepath = os.getenv(
+            "TRANSACTION_SCHEMA_PATH", "prompts/transaction_schema.txt"
+        )
 
-        fallback = 'Translate query.\nSCHEMA:\n{live_schema_context}\nTABLES:\n{allowed_table_rules}\nFORMAT:\n{{"sql_query": "..."}}'
+        fallback = (
+            "Translate query.\n"
+            "SCHEMA:\n{live_schema_context}\n"
+            "TABLES:\n{allowed_table_rules}\n"
+            'FORMAT:\n{{"sql_query": "..."}}'
+        )
         watchdog.register_prompt(
             file_path=self.prompt_filepath,
             required_keys=[
@@ -58,26 +68,44 @@ class SQLGenerationAgent:
             fallback_text=fallback,
         )
 
-    # todo - remove if not needed
-    def _load_prompt_template(self) -> str:
-        try:
-            with open(self.prompt_filepath, "r", encoding="utf-8") as f:
-                return f.read()
-        except Exception:
-            return 'Translate user query to SQL.\nSCHEMA:\n{live_schema_context}\nTABLES:\n{allowed_table_rules}\nFORMAT:\n{{"sql_query": "..."}}'
+        jsonb_fallback = (
+            "Table: {target_schema}.transactions -> Columns: [id, created_on, information (jsonb)]\n"
+            "JSONB ARRAY EXTRACTION RULES:\n"
+            "- Never extract lists or arrays using paths like '->> 0', as this discards data rows.\n"
+            "- Unpack and expand JSONB arrays into distinct records using a CROSS JOIN LATERAL pattern.\n"
+            "- Example template:\n"
+            "  SELECT t.id, x.product_id FROM {target_schema}.transactions t\n"
+            "  CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS x(product_id INT);"
+        )
+        watchdog.register_prompt(
+            file_path=self.jsonb_schema_filepath,
+            required_keys=[],
+            fallback_text=jsonb_fallback,
+        )
 
     def generate_query(self, user_question: str, model_name: str) -> str | None:
         """Isolated pipeline to extract a valid SQL string, accelerated via static memory caches."""
         live_schema_context = self.discoverer.get_active_schema_documentation()
+        jsonb_schema_rules = watchdog.get_prompt(self.jsonb_schema_filepath)
+
+        # Handle interpolation for target_schema inside the fallback string safely
+        if "{target_schema}" in jsonb_schema_rules:
+            jsonb_schema_rules = jsonb_schema_rules.replace(
+                "{target_schema}", self.target_schema
+            )
+
+        extended_schema_context = f"{live_schema_context}\n\n{jsonb_schema_rules}"
+
         allowed_table_rules = ", ".join(
             [f"'{self.target_schema}.{t}'" for t in self.db_tool.allowed_tables]
         )
 
         template = watchdog.get_prompt(self.prompt_filepath)
-        system_instruction = template.format(
-            live_schema_context=live_schema_context,
-            allowed_table_rules=allowed_table_rules,
-            target_schema=self.target_schema,
+
+        system_instruction = (
+            template.replace("{live_schema_context}", extended_schema_context)
+            .replace("{allowed_table_rules}", allowed_table_rules)
+            .replace("{target_schema}", self.target_schema)
         )
 
         try:
@@ -95,9 +123,7 @@ class SQLGenerationAgent:
                     sql_str,
                     flags=re.DOTALL | re.IGNORECASE,
                 )
-                sql_str = (
-                    sql_str.replace('\\"', '"').replace("\n", " ").replace("\t", " ")
-                )
+                sql_str = sql_str.replace("\n", " ").replace("\t", " ")
                 sql_str = re.sub(r"\s+", " ", sql_str)
                 return sql_str.strip()
 
@@ -167,8 +193,8 @@ class ResponseSynthesisAgent:
         self, user_question: str, db_rows_json: str, model_name: str
     ) -> str:
         template = self._load_prompt_template()
-        synthesis_prompt = template.format(
-            user_question=user_question, db_rows_json=db_rows_json
+        synthesis_prompt = template.replace("{user_question}", user_question).replace(
+            "{db_rows_json}", db_rows_json
         )
 
         try:
@@ -195,6 +221,26 @@ class AgentSQL:
         self.sql_generation_worker = SQLGenerationAgent(self.client, self.target_schema)
         self.synthesis_worker = ResponseSynthesisAgent(self.client)
 
+    @staticmethod
+    def _sanitize_data(data):
+        """Recursively converts datetimes and Decimals into standard primitives."""
+        if isinstance(data, dict):
+            return {k: AgentSQL._sanitize_data(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [AgentSQL._sanitize_data(item) for item in data]
+        elif isinstance(data, (datetime.datetime, datetime.date)):
+            return data.isoformat()
+        elif isinstance(data, Decimal):
+            return float(data)
+        return data
+
+    @staticmethod
+    def _datetime_encoder(obj):
+        """Custom handler for serialising dates and times safely inside json.dumps()."""
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
     def run_workflow(
         self, user_question: str, selected_model: str | None = None
     ) -> dict:
@@ -217,12 +263,16 @@ class AgentSQL:
             }
 
         try:
-            tool_output_parsed = self.db_tool.execute_read_query_raw(generated_sql)
+            raw_output = self.db_tool.execute_read_query_raw(generated_sql)
+            tool_output_parsed = self._sanitize_data(raw_output)
+            clean_json_payload = json.dumps(
+                tool_output_parsed, default=self._datetime_encoder
+            )
         except Exception as e:
             return {
                 "tool_called": True,
                 "generated_sql": generated_sql,
-                "answer": f"Database execution halted due to system permissions rules: {str(e)}",
+                "answer": f"Database execution halted due to system serialization rules: {str(e)}",
                 "raw_db_rows": None,
                 "active_model": active_model,
             }
@@ -236,7 +286,6 @@ class AgentSQL:
                 "active_model": active_model,
             }
 
-        clean_json_payload = json.dumps(tool_output_parsed)
         final_answer = self.synthesis_worker._generate_advice(
             user_question, clean_json_payload, model_name=active_model
         )
