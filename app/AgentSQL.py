@@ -71,8 +71,9 @@ class SQLGenerationAgent:
             "JSONB ARRAY EXTRACTION RULES:\n"
             "- Never extract lists or arrays using paths like '->> 0', as this discards data rows.\n"
             "- Unpack and expand JSONB arrays into distinct records using a CROSS JOIN LATERAL pattern.\n"
-            "- Example template: SELECT t.id, x.product_id FROM {target_schema}.transactions t "
-            "CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS x(product_id INT);"
+            "- Example template:\n"
+            "  SELECT t.id, x.product_id FROM {target_schema}.transactions t\n"
+            "  CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS x(product_id INT);"
         )
         watchdog.register_prompt(
             file_path=self.jsonb_schema_filepath,
@@ -85,6 +86,12 @@ class SQLGenerationAgent:
         live_schema_context = self.discoverer.get_active_schema_documentation()
         jsonb_schema_rules = watchdog.get_prompt(self.jsonb_schema_filepath)
 
+        # Handle interpolation for target_schema inside the fallback string safely
+        if "{target_schema}" in jsonb_schema_rules:
+            jsonb_schema_rules = jsonb_schema_rules.replace(
+                "{target_schema}", self.target_schema
+            )
+
         extended_schema_context = f"{live_schema_context}\n\n{jsonb_schema_rules}"
 
         allowed_table_rules = ", ".join(
@@ -92,10 +99,11 @@ class SQLGenerationAgent:
         )
 
         template = watchdog.get_prompt(self.prompt_filepath)
-        system_instruction = template.format(
-            live_schema_context=extended_schema_context,
-            allowed_table_rules=allowed_table_rules,
-            target_schema=self.target_schema,
+
+        system_instruction = (
+            template.replace("{live_schema_context}", extended_schema_context)
+            .replace("{allowed_table_rules}", allowed_table_rules)
+            .replace("{target_schema}", self.target_schema)
         )
 
         try:
@@ -183,8 +191,8 @@ class ResponseSynthesisAgent:
         self, user_question: str, db_rows_json: str, model_name: str
     ) -> str:
         template = self._load_prompt_template()
-        synthesis_prompt = template.format(
-            user_question=user_question, db_rows_json=db_rows_json
+        synthesis_prompt = template.replace("{user_question}", user_question).replace(
+            "{db_rows_json}", db_rows_json
         )
 
         try:
