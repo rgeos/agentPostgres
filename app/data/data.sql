@@ -44,3 +44,8 @@ values
 (4, 100, 'Ms. Alice'),
 (5, 150, 'Ms. Claire'),
 (5, 100, 'Ms. Grapes');
+
+-- test
+  SELECT t.id, t.created_on, item.product_id, item.quantity, item.price
+  FROM isolated_analytics_schema.transactions t
+  CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS item(product_id INT, quantity INT, price NUMERIC);

@@ -28,8 +28,8 @@ def _cached_llm_sql_call(
         format="json",
         options={
             "temperature": 0.0,
-            "num_ctx": 2048,
-            "num_predict": 256,
+            "num_ctx": 4096,  # Expanded context to safely process JSONB layout structures
+            "num_predict": 512,  # Expanded response scope for longer CROSS JOIN queries
             "seed": env_seed,
         },
     )
@@ -50,7 +50,12 @@ class SQLGenerationAgent:
             "TRANSACTION_SCHEMA_PATH", "prompts/transaction_schema.txt"
         )
 
-        fallback = 'Translate query.\nSCHEMA:\n{live_schema_context}\nTABLES:\n{allowed_table_rules}\nFORMAT:\n{{"sql_query": "..."}}'
+        fallback = (
+            "Translate query.\n"
+            "SCHEMA:\n{live_schema_context}\n"
+            "TABLES:\n{allowed_table_rules}\n"
+            'FORMAT:\n{{"sql_query": "..."}}'
+        )
         watchdog.register_prompt(
             file_path=self.prompt_filepath,
             required_keys=[
@@ -61,12 +66,19 @@ class SQLGenerationAgent:
             fallback_text=fallback,
         )
 
+        jsonb_fallback = (
+            "Table: {target_schema}.transactions -> Columns: [id, created_on, information (jsonb)]\n"
+            "JSONB ARRAY EXTRACTION RULES:\n"
+            "- Never extract lists or arrays using paths like '->> 0', as this discards data rows.\n"
+            "- Unpack and expand JSONB arrays into distinct records using a CROSS JOIN LATERAL pattern.\n"
+            "- Example template: SELECT t.id, x.product_id FROM {target_schema}.transactions t "
+            "CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS x(product_id INT);"
+        )
         watchdog.register_prompt(
             file_path=self.jsonb_schema_filepath,
-            required_keys=[],  # None strictly required unless you pass layout formatting keys
-            fallback_text="Table: isolated_analytocs_schema.transactions -> Columns: [id, created_on (timestamp), information (jsonb)]",
+            required_keys=[],
+            fallback_text=jsonb_fallback,
         )
-
 
     def generate_query(self, user_question: str, model_name: str) -> str | None:
         """Isolated pipeline to extract a valid SQL string, accelerated via static memory caches."""
@@ -101,9 +113,7 @@ class SQLGenerationAgent:
                     sql_str,
                     flags=re.DOTALL | re.IGNORECASE,
                 )
-                sql_str = (
-                    sql_str.replace('\\"', '"').replace("\n", " ").replace("\t", " ")
-                )
+                sql_str = sql_str.replace("\n", " ").replace("\t", " ")
                 sql_str = re.sub(r"\s+", " ", sql_str)
                 return sql_str.strip()
 

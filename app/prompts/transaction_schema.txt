@@ -4,6 +4,33 @@ Columns:
 - created_on (timestamp without time zone)
 - information (jsonb) -> Deep Nested JSON Structure
 
+JSONB Column Schema Structure ('information')
+{
+  "items": [
+    {
+      "price": 7176.75,
+      "quantity": 806,
+      "productId": "magna id pariatur non",
+      "productName": "est laborum consectetur adipisicing tempor"
+    },
+    {
+      "price": 1547.51,
+      "quantity": 647,
+      "productId": "consequat sint enim ut deserunt",
+      "productName": "nulla deserunt do culpa veniam"
+    }
+  ],
+  "amount": 2,
+  "status": "SHIPPED",
+  "orderId": 39449732,
+  "customerName": "non fugiat eiusmod laborum",
+  "shippingAddress": {
+    "city": "Tokyo",
+    "street": "do ipsum eiusmod",
+    "zipcode": "anim"
+  }
+}
+
 JSONB 'information' Schema Breakdown & Access Paths:
 
 * Order Identifier: (information->>'orderId')::bigint
@@ -22,15 +49,10 @@ JSONB 'information' Schema Breakdown & Access Paths:
     * Item Unit Price: (information->'items'->0->>'price')::numeric
     * Item Quantity: (information->'items'->0->>'quantity')::integer
 
-PostgreSQL JSONB Query Rules & Syntax Examples:
-
-1. Scalar Extraction: Always use the '->>' operator to pull a field out as raw text before casting.
-2. Unpacking Arrays: To query or aggregate items across all rows, expand the JSON array using 'jsonb_array_elements':
-SELECT
-t.id,
-(item->>'productId') AS product_id,
-(item->>'quantity')::integer AS qty
-FROM {target_schema}.transactions t,
-LATERAL jsonb_array_elements(t.information->'items') AS item;
-3. Mathematical Casting: Wrap queries calculating totals in numeric wrappers:
-SUM((information->>'amount')::numeric)
+CRITICAL RULES FOR ARRAYS
+- Never use '->> 0' to read list items, as this only extracts the first element.
+- To fully expand and flatten JSONB arrays into distinct rows, use a CROSS JOIN with jsonb_to_recordset().
+- Example Query to expand the items array:
+  SELECT t.id, t.created_on, item.product_id, item.quantity, item.price
+  FROM public_read_only.transactions t
+  CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS item(product_id INT, quantity INT, price NUMERIC);
