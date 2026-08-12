@@ -16,11 +16,6 @@ from AgentSupport import AgentSupport
 from PromptWatchdog import watchdog
 
 db_manager = DatabaseManager()
-# agent_sql = AgentSQL()
-# agent_consulting = AgentConsulting()
-# todo - the value of the arguments should be in the .env
-# agent_support = AgentSupport(target_table="products", pdf_dir_path="./documentation")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -57,7 +52,7 @@ async def lifespan(app: FastAPI):
 
     agent_sql = AgentSQL()
     agent_consulting = AgentConsulting()
-    agent_support = AgentSupport()
+    agent_support = AgentSupport(pdf_dir_path="./documentation")
 
     yield
     print("Tearing down API runtime context...")

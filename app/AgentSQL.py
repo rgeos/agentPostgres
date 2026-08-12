@@ -48,15 +48,19 @@ class SQLGenerationAgent:
         self.discoverer = SchemaDiscoverer()
         self.db_tool = DatabaseTool()
         self.prompt_filepath = os.getenv("SQL_PROMPT_PATH", "prompts/agent_sql.txt")
-        self.jsonb_schema_filepath = os.getenv(
-            "TRANSACTION_SCHEMA_PATH", "prompts/transaction_schema.txt"
-        )
 
         fallback = (
             "Translate query.\n"
             "SCHEMA:\n{live_schema_context}\n"
             "TABLES:\n{allowed_table_rules}\n"
-            'FORMAT:\n{{"sql_query": "..."}}'
+            "FORMAT:\n"
+            '{{"sql_query": "..."}}\n\n'
+            "JSONB ARRAY EXTRACTION RULES:\n"
+            "- Never extract lists or arrays using paths like '->> 0', as this discards data rows.\n"
+            "- Unpack and expand JSONB arrays into distinct records using a CROSS JOIN LATERAL pattern.\n"
+            "- Example template:\n"
+            "  SELECT t.id, x.product_id FROM {target_schema}.transactions t\n"
+            "  CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS x(product_id INT);"
         )
         watchdog.register_prompt(
             file_path=self.prompt_filepath,
@@ -68,33 +72,9 @@ class SQLGenerationAgent:
             fallback_text=fallback,
         )
 
-        jsonb_fallback = (
-            "Table: {target_schema}.transactions -> Columns: [id, created_on, information (jsonb)]\n"
-            "JSONB ARRAY EXTRACTION RULES:\n"
-            "- Never extract lists or arrays using paths like '->> 0', as this discards data rows.\n"
-            "- Unpack and expand JSONB arrays into distinct records using a CROSS JOIN LATERAL pattern.\n"
-            "- Example template:\n"
-            "  SELECT t.id, x.product_id FROM {target_schema}.transactions t\n"
-            "  CROSS JOIN LATERAL jsonb_to_recordset(t.information->'items') AS x(product_id INT);"
-        )
-        watchdog.register_prompt(
-            file_path=self.jsonb_schema_filepath,
-            required_keys=[],
-            fallback_text=jsonb_fallback,
-        )
-
     def generate_query(self, user_question: str, model_name: str) -> str | None:
         """Isolated pipeline to extract a valid SQL string, accelerated via static memory caches."""
         live_schema_context = self.discoverer.get_active_schema_documentation()
-        jsonb_schema_rules = watchdog.get_prompt(self.jsonb_schema_filepath)
-
-        # Handle interpolation for target_schema inside the fallback string safely
-        if "{target_schema}" in jsonb_schema_rules:
-            jsonb_schema_rules = jsonb_schema_rules.replace(
-                "{target_schema}", self.target_schema
-            )
-
-        extended_schema_context = f"{live_schema_context}\n\n{jsonb_schema_rules}"
 
         allowed_table_rules = ", ".join(
             [f"'{self.target_schema}.{t}'" for t in self.db_tool.allowed_tables]
@@ -103,7 +83,7 @@ class SQLGenerationAgent:
         template = watchdog.get_prompt(self.prompt_filepath)
 
         system_instruction = (
-            template.replace("{live_schema_context}", extended_schema_context)
+            template.replace("{live_schema_context}", live_schema_context)
             .replace("{allowed_table_rules}", allowed_table_rules)
             .replace("{target_schema}", self.target_schema)
         )
