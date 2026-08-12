@@ -16,10 +16,6 @@ from AgentSupport import AgentSupport
 from PromptWatchdog import watchdog
 
 db_manager = DatabaseManager()
-# agent_sql = AgentSQL()
-# agent_consulting = AgentConsulting()
-# todo - the value of the arguments should be in the .env
-# agent_support = AgentSupport(target_table="products", pdf_dir_path="./documentation")
 
 
 @asynccontextmanager
@@ -43,21 +39,27 @@ async def lifespan(app: FastAPI):
         # Exact match or exact base-tag match validation loop
         if target_model not in cached_names:
             print(f"[BOOT] Model '{target_model}' not found in local cache.")
-            print(f"[BOOT] Pulling '{target_model}' from Ollama registry (this may take a few minutes)...")
+            print(
+                f"[BOOT] Pulling '{target_model}' from Ollama registry (this may take a few minutes)..."
+            )
 
             # This locks execution thread until the download completes safely
             init_client.pull(model=target_model)
             print(f"[BOOT] Model '{target_model}' successfully pulled and verified.")
         else:
-            print(f"[BOOT] Model '{target_model}' verified active in memory cluster cache.")
+            print(
+                f"[BOOT] Model '{target_model}' verified active in memory cluster cache."
+            )
 
     except Exception as e:
         print(f"[BOOT WARNING] Failed to automatically audit/pull Ollama models: {e}")
-        print("[BOOT WARNING] App initialization proceeding. Container might throw downstream runtime errors.")
+        print(
+            "[BOOT WARNING] App initialization proceeding. Container might throw downstream runtime errors."
+        )
 
     agent_sql = AgentSQL()
     agent_consulting = AgentConsulting()
-    agent_support = AgentSupport()
+    agent_support = AgentSupport(pdf_dir_path="./documentation")
 
     yield
     print("Tearing down API runtime context...")

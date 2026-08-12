@@ -1,13 +1,6 @@
 import os
 import re
 import json
-from decimal import Decimal
-import psycopg2
-
-
-import os
-import re
-import json
 import datetime
 from decimal import Decimal
 import psycopg2
