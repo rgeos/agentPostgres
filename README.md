@@ -2,7 +2,8 @@
 
 My first attempt at containerized Multi-Agent Retrieval-Augmented Generation (RAG) system.  
 The application coordinates specialized local LLM microservices to securely query structured databases (PostgreSQL/pgvector) 
-and extract text from unstructured documents (PDFs), all running fully offline on local hardware (on CPU).
+and extract text from unstructured documents (PDFs), all running fully offline 
+(no queries outside your local network perimeter) and on local hardware (on CPU, although it can be set to run on GPU also).
 
 ---
 
@@ -19,8 +20,8 @@ It features automated schema parsing and hardcoded template rules to properly un
 
 ## 🛠️ Prerequisites
 Before running the application, make sure your host machine has the following tools installed:
-*   [Docker](https://docker.com)
-*   [Docker Compose](https://docker.com)
+*   [Docker](https://docs.docker.com/engine/install/)
+*   [Docker Compose](https://docs.docker.com/compose/install)
 
 ---
 
@@ -82,8 +83,10 @@ Run the Docker Compose command to build out the images and spawn the background 
 ```bash
 docker compose up -d
 ```
-**Note**: During the very first build process, the application will automatically call the Ollama registry API to fetch your configured default model (`qwen2.5:3b`). 
-This might take a few minutes depending on your internet connection speed.
+**Note**: During the very first build process, the application will automatically call the Ollama registry API 
+to fetch your configured [default model](https://ollama.com/library/qwen2.5:3b) (`qwen2.5:3b`).   
+This might take a few minutes depending on your internet connection speed.  
+It will require about 2G of disk space.
 
 ### Step 2: Verify Service Health
 Check if your data schemas, read-only permissions, and models were initialized correctly:
