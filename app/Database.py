@@ -38,83 +38,31 @@ class DatabaseManager:
         )
 
     def initialize_environment(self):
-        """Creates custom schemas, activates fuzzy matching, and loads default data."""
+        """Creates custom schemas, activates fuzzy matching, and loads default data from data/data.sql."""
+        sql_file_path = "data/data.sql"
         try:
+            # 1. Read the schema and structural scripts from the target file
+            if not os.path.exists(sql_file_path):
+                raise FileNotFoundError(
+                    f"The structural script was not found at: '{sql_file_path}'"
+                )
+
+            with open(sql_file_path, "r", encoding="utf-8") as f:
+                sql_script = f.read()
+
             with self.get_admin_connection() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                    cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
+                    # 2. Execute the entire SQL script string dynamically against the database
+                    cursor.execute(sql_script)
 
-                    cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {self.schema};")
+                    # 3. Set the password
                     cursor.execute(
-                        f"""
-                        CREATE TABLE IF NOT EXISTS {self.schema}.products (
-                            id SERIAL PRIMARY KEY,
-                            name VARCHAR(100),
-                            price NUMERIC,
-                            stock INT
-                        );
-                    """
-                    )
-
-                    cursor.execute(
-                        f"""
-                        CREATE TABLE IF NOT EXISTS {self.schema}.transactions (
-                            id SERIAL PRIMARY KEY,
-                            created_on TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            information JSONB
-                        );
-                    """
-                    )
-
-                    cursor.execute(
-                        f"CREATE INDEX IF NOT EXISTS idx_transactions_info_gin ON {self.schema}.transactions USING gin (information);"
-                    )
-
-                    cursor.execute(
-                        f"CREATE INDEX IF NOT EXISTS idx_products_name_trgm ON {self.schema}.products USING gin (name gin_trgm_ops);"
-                    )
-
-                    cursor.execute(f"SELECT COUNT(*) FROM {self.schema}.products;")
-                    if cursor.fetchone() == 0:
-                        cursor.execute(
-                            f"INSERT INTO {self.schema}.products (name, price, stock) VALUES ('Apple', 1.50, 150);"
-                        )
-                        cursor.execute(
-                            f"INSERT INTO {self.schema}.products (name, price, stock) VALUES ('Laptop', 1200.00, 15);"
-                        )
-                        cursor.execute(
-                            f"INSERT INTO {self.schema}.products (name, price, stock) VALUES ('Smartphone', 800.00, 42);"
-                        )
-                        cursor.execute(
-                            f"INSERT INTO {self.schema}.products (name, price, stock) VALUES ('Headphones', 150.00, 100);"
-                        )
-
-                    cursor.execute(
-                        f"SELECT 1 FROM pg_roles WHERE rolname='{self.reader_user}';"
-                    )
-                    if not cursor.fetchone():
-                        cursor.execute(
-                            f"CREATE USER {self.reader_user} WITH PASSWORD '{self.reader_password}';"
-                        )
-
-                    cursor.execute(
-                        f"REVOKE ALL ON SCHEMA public FROM {self.reader_user};"
-                    )
-
-                    cursor.execute(
-                        f"GRANT USAGE ON SCHEMA {self.schema} TO {self.reader_user};"
-                    )
-                    cursor.execute(
-                        f"GRANT SELECT ON ALL TABLES IN SCHEMA {self.schema} TO {self.reader_user};"
-                    )
-                    cursor.execute(
-                        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {self.schema} GRANT SELECT ON TABLES TO {self.reader_user};"
+                        f"ALTER ROLE {self.reader_user} WITH PASSWORD '{self.reader_password}';"
                     )
 
                     conn.commit()
             print(
-                f"Database initialized with fuzzy text lookup tools matching schema: '{self.schema}'"
+                f"Database initialized with external data file matching schema: '{self.schema}'"
             )
         except Exception as e:
             print(f"Database initialization lifecycle failure: {e}")
