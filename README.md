@@ -82,8 +82,8 @@ Run the Docker Compose command to build out the images and spawn the background 
 ```bash
 docker compose up -d
 ```
-*Note: During the very first build process, the application will automatically call the Ollama registry API to fetch your configured default model (`qwen2.5:3b`).  
-This might take a few minutes depending on your internet connection speed.*
+**Note**: During the very first build process, the application will automatically call the Ollama registry API to fetch your configured default model (`qwen2.5:3b`). 
+This might take a few minutes depending on your internet connection speed.
 
 ### Step 2: Verify Service Health
 Check if your data schemas, read-only permissions, and models were initialized correctly:
@@ -98,7 +98,7 @@ curl http://<host_URL_or_IP_address>:8000/debug/health
 - Access the application from the UI at `http://<host_URL_or_IP_address>:8000/`
 - Select the type of agent you want to interact with (Eg: SQL, Support, Consulting)
 - Select the LLM model
-- Type your question into the query box:
+- Type your question into the query box and select the appropriate Agent (try these first):
    - (Consulting): What should I do to reduce my products stock based on the current orders?
    - (Support): Where is each and every product imported from?
    - (SQL): What products do we have in the stock and what is the volume of each type of product?
