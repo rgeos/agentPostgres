@@ -1,18 +1,28 @@
 import os
 import json
 import ollama
-from database import DatabaseTool, SchemaDiscoverer, DecimalEncoder
+from Database import DatabaseTool, SchemaDiscoverer, DecimalEncoder
 from AgentSQL import SQLGenerationAgent
+from PromptWatchdog import watchdog
 
 
 class AgentConsulting:
     def __init__(self):
         ollama_host = os.getenv("OLLAMA_HOST", "http://ollama:11434")
         self.client = ollama.Client(host=ollama_host)
-        self.default_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b-instruct-q4_K_M")
+        self.default_model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
         self.target_schema = os.getenv("TARGET_SCHEMA", "public_read_only")
+        self.prompt_filepath = os.getenv(
+            "CONSULTING_PROMPT_PATH", "prompts/agent_consulting.txt"
+        )
 
-        # Reuse baseline ecosystem tools
+        fallback = "You are a consultant.\nCONTEXT:\n{schema_context}\nDATA:\n{db_rows_json}\nINQUIRY:\n{user_question}"
+        watchdog.register_prompt(
+            file_path=self.prompt_filepath,
+            required_keys=["schema_context", "db_rows_json", "user_question"],
+            fallback_text=fallback,
+        )
+
         self.db_tool = DatabaseTool()
         self.discoverer = SchemaDiscoverer()
         self.sql_worker = SQLGenerationAgent(self.client, self.target_schema)
@@ -62,7 +72,7 @@ class AgentConsulting:
         clean_json_data = json.dumps(db_rows, cls=DecimalEncoder)
         live_schema_context = self.discoverer.get_active_schema_documentation()
 
-        consulting_advice = self._generate_strategic_advice(
+        consulting_advice = self._generate_advice(
             user_question=user_question,
             db_rows_json=clean_json_data,
             schema_context=live_schema_context,
@@ -77,24 +87,65 @@ class AgentConsulting:
             "active_model": active_model,
         }
 
-    def _generate_strategic_advice(
+    # make the agent collaborate
+    def run_collaboration(
+        self, user_question: str, agent_sql_instance, selected_model: str | None = None
+    ) -> dict:
+        """
+        Collaboration: AgentSQL fetches and cleans data,
+        AgentConsulting synthesizes corporate strategy from it.
+        """
+        active_model = selected_model if selected_model else self.default_model
+
+        # 1. Delegate data gathering to AgentSQL
+        print("[COLLABORATION] Routing data gathering to AgentSQL")
+        sql_result = agent_sql_instance.run_workflow(
+            user_question, selected_model=active_model
+        )
+
+        # If AgentSQL failed to get data, return its fallback message safely
+        if not sql_result.get("tool_called") or not sql_result.get("raw_db_rows"):
+            return {
+                "success": False,
+                "consulting_advice": f"Consulting blocked. AgentSQL Reason: {sql_result['answer']}",
+                "active_model": active_model,
+            }
+
+        # 2. Extract clean data payloads from AgentSQL's output
+        db_rows = sql_result["raw_db_rows"]
+        clean_json_data = json.dumps(db_rows, cls=DecimalEncoder)
+        live_schema_context = self.discoverer.get_active_schema_documentation()
+
+        # 3. AgentConsulting performs strategic synthesis
+        print("[COLLABORATION] Routing data to AgentConsulting for strategic advice")
+        strategic_advice = self._generate_advice(
+            user_question=user_question,
+            db_rows_json=clean_json_data,
+            schema_context=live_schema_context,
+            model_name=active_model,
+        )
+
+        return {
+            "success": True,
+            "generated_sql": sql_result["generated_sql"],
+            "metrics_payload": db_rows,
+            "consulting_advice": strategic_advice,
+            "active_model": active_model,
+        }
+
+    def _generate_advice(
         self,
         user_question: str,
         db_rows_json: str,
         schema_context: str,
         model_name: str,
     ) -> str:
-        consulting_prompt = (
-            f"You are a Senior Retail Management Consultant. Synthesize the provided database records "
-            f"into actionable business insights for executives.\n\n"
-            f"CONTEXT SCHEMA ENVIRONMENT:\n{schema_context}\n\n"
-            f"RAW BUSINESS METRICS (JSON):\n{db_rows_json}\n\n"
-            f"EXECUTIVE INQUIRY: '{user_question}'\n\n"
-            f"INSTRUCTIONS:\n"
-            f"1. Directly answer the inquiry using exclusively the metrics provided above.\n"
-            f"2. Provide 2-3 specific business or inventory strategies (e.g., pricing optimization, restocking advice, capital allocation).\n"
-            f"3. Frame responses professionally. Bold key operational performance terms.\n"
-            f"4. Never mention database table structures, column definitions, or SQL phrasing to the executive."
+        # Instant memory load from pre-cached layout data
+        template = watchdog.get_prompt(self.prompt_filepath)
+        consulting_prompt = template.format(
+            schema_context=schema_context,
+            db_rows_json=db_rows_json,
+            user_question=user_question,
         )
 
         try:
@@ -107,7 +158,8 @@ class AgentConsulting:
         except Exception as e:
             return f"Strategic analysis compilation failure: {str(e)}"
 
-    def _format_error_payload(self, model: str, sql: str | None, message: str) -> dict:
+    @staticmethod
+    def _format_error_payload(model: str, sql: str | None, message: str) -> dict:
         """Standardizes edge-case handling across structural barriers."""
         return {
             "success": False,
