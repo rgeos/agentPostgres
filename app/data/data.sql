@@ -1,14 +1,11 @@
 DROP SCHEMA IF EXISTS isolated_analytics_schema CASCADE; 
 CREATE SCHEMA isolated_analytics_schema;
 
-
+-- create role
+CREATE ROLE llm_reader;
 ALTER SCHEMA isolated_analytics_schema OWNER TO llm_reader;
-
---
--- Name: SCHEMA isolated_analytics_schema; Type: COMMENT; Schema: -; Owner: llm_reader
---
-
 COMMENT ON SCHEMA isolated_analytics_schema IS 'read only for LLM';
+
 
 
 SET default_tablespace = '';
@@ -223,13 +220,6 @@ ALTER TABLE ONLY isolated_analytics_schema.transactions
 
 
 --
--- Name: idx_products_name_trgm; Type: INDEX; Schema: isolated_analytics_schema; Owner: postgres
---
-
-CREATE INDEX idx_products_name_trgm ON isolated_analytics_schema.products USING gin (name public.gin_trgm_ops);
-
-
---
 -- Name: idx_transactions_info_gin; Type: INDEX; Schema: isolated_analytics_schema; Owner: postgres
 --
 
@@ -270,6 +260,10 @@ GRANT SELECT ON TABLE isolated_analytics_schema.transactions TO llm_reader;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA isolated_analytics_schema GRANT SELECT ON TABLES TO llm_reader;
 
+GRANT CONNECT ON DATABASE rag_database TO llm_reader;
+GRANT USAGE ON SCHEMA isolated_analytics_schema TO llm_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA isolated_analytics_schema TO llm_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA isolated_analytics_schema GRANT SELECT ON TABLES TO llm_reader;
 
 --
 -- PostgreSQL database dump complete
