@@ -43,7 +43,9 @@ class DatabaseManager:
         try:
             # 1. Read the schema and structural scripts from the target file
             if not os.path.exists(sql_file_path):
-                raise FileNotFoundError(f"The structural script was not found at: '{sql_file_path}'")
+                raise FileNotFoundError(
+                    f"The structural script was not found at: '{sql_file_path}'"
+                )
 
             with open(sql_file_path, "r", encoding="utf-8") as f:
                 sql_script = f.read()
@@ -53,27 +55,9 @@ class DatabaseManager:
                     # 2. Execute the entire SQL script string dynamically against the database
                     cursor.execute(sql_script)
 
-                    # 3. Keep operational logic for runtime dynamic role provisions
+                    # 3. Set the password
                     cursor.execute(
-                        f"SELECT 1 FROM pg_roles WHERE rolname='{self.reader_user}';"
-                    )
-                    if not cursor.fetchone():
-                        cursor.execute(
-                            f"CREATE USER {self.reader_user} WITH PASSWORD '{self.reader_password}';"
-                        )
-
-                    cursor.execute(
-                        f"REVOKE ALL ON SCHEMA public FROM {self.reader_user};"
-                    )
-
-                    cursor.execute(
-                        f"GRANT USAGE ON SCHEMA {self.schema} TO {self.reader_user};"
-                    )
-                    cursor.execute(
-                        f"GRANT SELECT ON ALL TABLES IN SCHEMA {self.schema} TO {self.reader_user};"
-                    )
-                    cursor.execute(
-                        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {self.schema} GRANT SELECT ON TABLES TO {self.reader_user};"
+                        f"ALTER ROLE {self.reader_user} WITH PASSWORD '{self.reader_password}';"
                     )
 
                     conn.commit()
