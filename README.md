@@ -32,6 +32,7 @@ Ensure your app components are laid out relative to your root compose footprint:
 ```text
 .
 ├── docker-compose.yml
+├── example.env
 ├── .env
 └── app/
     ├── main.py
@@ -47,32 +48,7 @@ Ensure your app components are laid out relative to your root compose footprint:
 ```
 
 ### 2. Configure Environment Variables
-Create a file named `.env` in the root directory. Paste and fill out the configuration block below:
-
-```ini
-# Database Core Configurations
-DB_HOST=db_host
-DB_PORT=5432
-DB_NAME=db_name
-DB_USER=db_user
-DB_PASSWORD=db_password
-
-# Restricted Database Read-Only Access
-TARGET_SCHEMA=isolated_analytics_schema
-LLM_READER_USER=llm_reader
-LLM_READER_PASSWORD=llm_password
-ALLOWED_TABLES=orders,products,transactions
-
-# Ollama Engine Settings
-OLLAMA_HOST=http://ollama:11434
-OLLAMA_MODEL=qwen2.5:3b
-OLLAMA_NUM_PARALLEL=2
-LLM_SEED=42
-
-# Operational System Settings
-HOST=0.0.0.0
-PORT=8000
-```
+Copy the provided `example.env` to `.env`. The included values should result in a running system.
 
 ---
 
@@ -86,7 +62,7 @@ docker compose up -d
 **Note**: During the very first build process, the application will automatically call the Ollama registry API 
 to fetch your configured [default model](https://ollama.com/library/qwen2.5:3b) (`qwen2.5:3b`).   
 This might take a few minutes depending on your internet connection speed.  
-It will require about 2G of disk space.
+It may require up to 6GB of disk space.
 
 ### Step 2: Verify Service Health
 Check if your data schemas, read-only permissions, and models were initialized correctly:

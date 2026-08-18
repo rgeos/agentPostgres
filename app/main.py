@@ -23,7 +23,8 @@ async def lifespan(app: FastAPI):
     print("Verifying internal microservice connectivity configurations...")
     watchdog.start()
     time.sleep(5)
-    db_manager.initialize_environment()
+    # Handle this with docker-entrypoint:
+    #db_manager.initialize_environment()
     global agent_sql, agent_consulting, agent_support
 
     # check if the model is present
