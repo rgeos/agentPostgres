@@ -1,9 +1,16 @@
+
+BEGIN WORK;
+
+LOCK TABLE pg_catalog.pg_namespace;
+
 DROP SCHEMA IF EXISTS isolated_analytics_schema CASCADE; 
 CREATE SCHEMA isolated_analytics_schema;
 
 -- create role
+DROP ROLE IF EXISTS llm_reader;
 CREATE ROLE llm_reader;
 ALTER ROLE llm_reader LOGIN;
+ALTER ROLE llm_reader WITH PASSWORD 'llm_password';
 ALTER SCHEMA isolated_analytics_schema OWNER TO llm_reader;
 COMMENT ON SCHEMA isolated_analytics_schema IS 'read only for LLM';
 
@@ -269,3 +276,5 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA isolated_analytics_schema GRANT SELECT ON TAB
 --
 -- PostgreSQL database dump complete
 --
+
+END WORK;
