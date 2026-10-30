@@ -1,6 +1,9 @@
-psycopg2-binary==2.9.9
-ollama==0.4.0
+agno[ollama]
 fastapi==0.110.0
-uvicorn==0.28.0
+ollama==0.4.0
+pgvector
+psycopg2-binary==2.9.9
 pypdf
 pytest
+sqlalchemy
+uvicorn==0.28.0
