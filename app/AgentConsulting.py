@@ -17,6 +17,7 @@ class AgentConsulting:
             tools=[sql_tools],
             instructions=read_prompt_file(get_consulting_prompt_path()),
             show_tool_calls=True,
+            telemetry=False,
         )
 
     def run(self, message: str) -> str:

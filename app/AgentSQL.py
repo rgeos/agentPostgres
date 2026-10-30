@@ -18,6 +18,7 @@ class AgentSQL:
             markdown=True,
             instructions=read_prompt_file(get_sql_prompt_path()),
             show_tool_calls=True,
+            telemetry=False,
         )
 
     def run(self, message: str) -> str:

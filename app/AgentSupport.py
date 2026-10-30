@@ -28,6 +28,7 @@ class AgentSupport:
             search_knowledge=True,
             markdown=True,
             instructions=read_prompt_file(get_support_prompt_path()),
+            telemetry=False,
         )
 
     def run(self, message: str) -> str:
