@@ -3,7 +3,7 @@ import os
 POSTGRES_URL = os.environ.get(
     "DATABASE_URL", "postgres+psycopg2://postgres:postgres@localhost:5432/postgres"
 )
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama_service:11434")
 DEFAULT_MODEL = os.environ.get("LLM_MODEL", "qwen2.5:3b")
 PROMPT_PATH_CONSULTING = os.environ.get(
     "PROMPT_PATH_CONSULTING", "prompts/agent_consulting.txt"
