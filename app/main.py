@@ -1,59 +1,48 @@
-import logging
-from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
-from AgentSQL import AgentSQL
-from AgentConsulting import AgentConsulting
-from AgentSupport import AgentSupport
+load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("AquilaOrchestrator")
+# Import the loader functions instead of global instances
+from AgentSQL import get_sql_agent
+from AgentConsulting import get_consulting_agent
+from AgentSupport import get_support_agent
 
-sql_service = None
-consulting_service = None
-support_service = None
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global sql_service, consulting_service, support_service
-    logger.info("Spawning Aquila microservices ...")
-
-    sql_service = AgentSQL()
-    consulting_service = AgentConsulting()
-    support_service = AgentSupport()
-    logger.info(f"Aquila microservices started ...")
-
-    yield
-    logger.info(f"Aquila microservices stopped ...")
+app = FastAPI(title="Air-Gapped Agno Engine")
 
 
-app = FastAPI(title="Aquila Orchestrator", lifespan=lifespan)
-
-
-class QueryPayload(BaseModel):
-    agent_type: str
-    message: str
+class AgentQuery(BaseModel):
+    agent_type: str  # "SQL", "Consulting", or "Support"
+    question: str
 
 
 @app.post("/query")
-async def process_incoming_query(payload: QueryPayload):
-    target = payload.agent_type.lower()
+async def handle_agent_interaction(payload: AgentQuery):
+    # Map types directly to the dynamic creation functions
+    agent_loaders = {
+        "SQL": get_sql_agent,
+        "Consulting": get_consulting_agent,
+        "Support": get_support_agent
+    }
+
+    loader = agent_loaders.get(payload.agent_type.strip())
+    if not loader:
+        raise HTTPException(status_code=400, detail="Invalid agent selector type configuration.")
 
     try:
-        if target == "sql":
-            output = sql_service.run(payload.message)
-        elif target == "consulting":
-            output = consulting_service.run(payload.message)
-        elif target == "support":
-            output = support_service.run(payload.message)
-        else:
-            raise HTTPException(
-                status_code=400, detail=f"{payload.agent_type}: Invalid agent type"
-            )
-
-        return {"content": output}
-
+        # Build the agent instance on-demand
+        selected_agent = loader()
+        response = selected_agent.run(payload.question)
+        return {"status": "success", "response": response.content}
     except Exception as e:
-        logger.error(f"Execution failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Inference error (Check if model download is still in progress): {str(e)}"
+        )
+
+
+@app.get("/debug/health")
+async def health_check():
+    return {"status": "healthy", "framework": "agno", "environment": "air-gapped-isolated"}

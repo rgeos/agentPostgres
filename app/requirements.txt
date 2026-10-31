@@ -1,9 +1,8 @@
-agno>=3.0.0
-fastapi==0.110.0
-ollama==0.4.0
-pgvector
-psycopg2-binary==2.9.9
-pypdf>=5.0.0
-pytest
-sqlalchemy
-uvicorn==0.28.0
+agno[ollama]
+fastapi
+uvicorn
+psycopg2-binary
+pydantic
+pypdf
+python-dotenv
+openai

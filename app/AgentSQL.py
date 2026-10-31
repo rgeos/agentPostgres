@@ -1,26 +1,24 @@
+import os
 from agno.agent import Agent
 from agno.models.ollama import Ollama
-from agno.tools.sql import SQLTools
-from common import get_db_url, get_ollama_host, get_default_model, get_sql_prompt_path, read_prompt_file
+from Database import DatabaseTool
 
-
-class AgentSQL:
-    def __init__(self):
-        sql_tools = SQLTools(
-            connection_string=get_db_url(),
-            cls_kwargs={"echo": False},
-        )
-
-        self.agent = Agent(
-            name="Agent - SQL",
-            model=Ollama(id=get_default_model(), host=get_ollama_host()),
-            tools=[sql_tools],
-            markdown=True,
-            instructions=read_prompt_file(get_sql_prompt_path()),
-            show_tool_calls=True,
-            telemetry=False,
-        )
-
-    def run(self, message: str) -> str:
-        response = self.agent.run(message)
-        return response.content
+# Define a function to lazily initialize the agent when called
+def get_sql_agent():
+    db_tool = DatabaseTool()
+    return Agent(
+        name="AgentSQL",
+        model=Ollama(
+            id="qwen2.5:3b",
+            host=os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        ),
+        description="You are a data extraction expert that translates natural language inquiries into PostgreSQL statements.",
+        instructions=[
+            "Always use the run_query tool to inspect structural data or pull records.",
+            "You must handle JSONB arrays correctly by employing CROSS JOIN LATERAL sets when needed.",
+            "Never run data-modification commands.",
+            "Return the resulting dataset or clear answers directly to the user."
+        ],
+        tools=[db_tool.run_query],
+        markdown=True
+    )

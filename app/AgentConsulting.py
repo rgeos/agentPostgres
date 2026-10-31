@@ -1,25 +1,22 @@
+import os
 from agno.agent import Agent
 from agno.models.ollama import Ollama
-from agno.tools.sql import SQLTools
-from common import get_db_url, get_ollama_host, get_default_model, get_consulting_prompt_path, read_prompt_file
+from Database import DatabaseTool
 
-
-class AgentConsulting:
-    def __init__(self):
-        sql_tools = SQLTools(
-            connection_string=get_db_url(),
-            cls_kwargs={"echo": False},
-        )
-
-        self.agent = Agent(
-            name="Agent - Consulting",
-            model=Ollama(id=get_default_model(), host=get_ollama_host()),
-            tools=[sql_tools],
-            instructions=read_prompt_file(get_consulting_prompt_path()),
-            show_tool_calls=True,
-            telemetry=False,
-        )
-
-    def run(self, message: str) -> str:
-        response = self.agent.run(message)
-        return response.content
+def get_consulting_agent():
+    db_tool = DatabaseTool()
+    return Agent(
+        name="AgentConsulting",
+        model=Ollama(
+            id="qwen2.5:3b",
+            host=os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        ),
+        description="You are a senior enterprise management consultant.",
+        instructions=[
+            "Synthesize high-level corporate strategies and supply-chain metrics based on live operational numbers.",
+            "Query the database via tools to check current inventory, stock levels, and historical order data before producing advice.",
+            "Provide strategic, actionable advice to help management balance production profiles and reduce product stocks safely."
+        ],
+        tools=[db_tool.run_query],
+        markdown=True
+    )
