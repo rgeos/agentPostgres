@@ -1,0 +1,115 @@
+name: agent-aquila
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_db
+    environment:
+      DB_HOST: ${DB_HOST:-postgres}
+      POSTGRES_DB: ${DB_NAME:-rag_database}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      DB_PORT: ${DB_PORT:-5432}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./app/data/:/docker-entrypoint-initdb.d/:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-rag_database}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+    networks:
+      - agno_network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # If running with a GPU, uncomment the lines below to enable hardware acceleration:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL}
+    cpuset: "0-15"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+#          cpus: '4.0'
+          memory: 4096M
+    restart: unless-stopped
+    networks:
+      - agno_network
+
+  # Initialization Hook: Auto-downloads model on the first startup
+  ollama-bootstrap:
+    image: ollama/ollama:latest
+    container_name: ollama_bootstrap
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: [ "sh", "-c", "ollama pull qwen2.5:3b" ]
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    networks:
+      - agno_network
+
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: agno_app_engine
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${LLM_READER_USER:-llm_reader}:${LLM_READER_PASSWORD:-llm_password}@postgres:5432/${DB_NAME:-rag_database}
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./app:/app
+      - ./app/documentation:/app/documentation
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+    restart: unless-stopped
+    networks:
+      - agno_network
+
+volumes:
+  pgdata:
+    name: agent-aquila-pgdata
+  ollama_data:
+    name: agent-aquila-ollama
+
+networks:
+  agno_network:
+    driver: bridge

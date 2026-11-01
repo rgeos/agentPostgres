@@ -1,190 +1,83 @@
 import os
-import re
-import json
-import datetime
-from decimal import Decimal
 import psycopg2
 
 
-class DecimalEncoder(json.JSONEncoder):
-    """Custom JSON encoder to safely handle PostgreSQL Decimal and DateTime data types."""
-
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj)
-        if isinstance(obj, (datetime.datetime, datetime.date)):
-            return obj.isoformat()
-        return super(DecimalEncoder, self).default(obj)
-
-
-class DatabaseManager:
-    """Manages high-privilege configuration, table schemas, and permissions structural work."""
-
-    def __init__(self):
-        self.host = os.getenv("DB_HOST")
-        self.db_name = os.getenv("DB_NAME")
-        self.admin_user = os.getenv("DB_USER")
-        self.admin_password = os.getenv("DB_PASSWORD")
-        self.schema = os.getenv("TARGET_SCHEMA", "public_read_only")
-        self.reader_user = os.getenv("LLM_READER_USER", "llm_reader")
-        self.reader_password = os.getenv("LLM_READER_PASSWORD", "readonlypassword")
-
-    def get_admin_connection(self):
-        return psycopg2.connect(
-            host=self.host,
-            database=self.db_name,
-            user=self.admin_user,
-            password=self.admin_password,
-        )
-
-    def initialize_environment(self):
-        """Creates custom schemas, activates fuzzy matching, and loads default data from data/data.sql."""
-        sql_file_path = "data/data.sql"
-        try:
-            # 1. Read the schema and structural scripts from the target file
-            if not os.path.exists(sql_file_path):
-                raise FileNotFoundError(
-                    f"The structural script was not found at: '{sql_file_path}'"
-                )
-
-            with open(sql_file_path, "r", encoding="utf-8") as f:
-                sql_script = f.read()
-
-            with self.get_admin_connection() as conn:
-                with conn.cursor() as cursor:
-                    # 2. Execute the entire SQL script string dynamically against the database
-                    cursor.execute(sql_script)
-
-                    # 3. Set the password
-                    cursor.execute(
-                        f"ALTER ROLE {self.reader_user} WITH PASSWORD '{self.reader_password}';"
-                    )
-
-                    conn.commit()
-            print(
-                f"Database initialized with external data file matching schema: '{self.schema}'"
-            )
-        except Exception as e:
-            print(f"Database initialization lifecycle failure: {e}")
-
-
 class DatabaseTool:
-    """Safely validates, cleans, and routes read-only queries through restricted user logins."""
-
     def __init__(self):
-        self.host = os.getenv("DB_HOST")
-        self.db_name = os.getenv("DB_NAME")
-        self.user = os.getenv("LLM_READER_USER", "llm_reader")
-        self.password = os.getenv("LLM_READER_PASSWORD", "readonlypassword")
+        self.conn_string = os.getenv(
+            "DATABASE_URL",
+            "postgres+psycopg2://postgres:password@localhost:5432/rag_database",
+        )
         self.forbidden_keywords = [
-            "drop",
-            "delete",
-            "truncate",
-            "update",
-            "insert",
-            "alter",
-            "grant",
+            "DROP",
+            "DELETE",
+            "TRUNCATE",
+            "ALTER",
+            "UPDATE",
+            "INSERT",
         ]
 
-        raw_tables = os.getenv("ALLOWED_TABLES", "products,orders")
-        self.allowed_tables = [t.strip() for t in raw_tables.split(",") if t.strip()]
+    def verify_connection(self, timeout: int = 5) -> dict:
+        """
+        Verifies database connectivity before agent operations.
+        Safe to call before run_query to ensure agent can access the database.
 
-        # we want deterministic answers - todo this does not really work
-        try:
-            self.seed = int(os.getenv("LLM_SEED", "0"))
-        except ValueError:
-            print("[WARN] LLM_SEED in .env is not a valid integer. Defaulting to 0.")
-            self.seed = 0
-
-    def get_connection(self):
-        return psycopg2.connect(
-            host=self.host,
-            database=self.db_name,
-            user=self.user,
-            password=self.password,
-        )
-
-    def _sanitize_query(self, sql_query: str) -> str:
-        cleaned = sql_query.strip()
-        has_semicolon = cleaned.endswith(";")
-        if has_semicolon:
-            cleaned = cleaned[:-1]
-
-        group_by_id_pattern = r"(?i)\s+group\s+by\s+([a-zA-Z0-9_\.]+)?\b(id)\b"
-        if re.search(group_by_id_pattern, cleaned):
-            print(
-                f"[SQL SANITIZER] Intercepted primary key grouping clause inside: '{sql_query}'"
-            )
-            cleaned = re.sub(group_by_id_pattern, "", cleaned)
-            select_id_comma_pattern = r"(?i)select\s+(\w+\.)?id\s*,\s*"
-            cleaned = re.sub(select_id_comma_pattern, "SELECT ", cleaned)
-
-        if has_semicolon:
-            cleaned += ";"
-        return cleaned
-
-    def execute_read_query_raw(self, sql_query: str) -> list:
-        """Executes query and returns a clean, native Python list object with serialized decimals."""
-        sql_query = self._sanitize_query(sql_query)
-        print(f"[TOOL EXECUTION] Processing query context: {sql_query}")
-
-        if any(keyword in sql_query.lower() for keyword in self.forbidden_keywords):
-            raise PermissionError(
-                "Security Error: Prohibited operational structure string generated by LLM."
-            )
-
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(sql_query)
-                columns = [desc[0] for desc in cursor.description]
-                results = cursor.fetchall()
-
-                raw_records = [dict(zip(columns, row)) for row in results]
-                json_str = json.dumps(raw_records, cls=DecimalEncoder)
-                return json.loads(json_str)
-
-
-class SchemaDiscoverer:
-    """Queries system catalog records at runtime to auto-generate documentation for the LLM."""
-
-    def __init__(self):
-        self.db_tool = DatabaseTool()
-        self.target_schema = os.getenv("TARGET_SCHEMA", "public_read_only")
-
-    def get_active_schema_documentation(self) -> str:
-        query = f"""
-            SELECT table_name, column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_schema = '{self.target_schema}'
-            ORDER BY table_name, ordinal_position;
+        :param timeout: Connection timeout in seconds (default: 5).
+        :return: dict with 'status' (bool), 'message' (str), and 'database_version' (str or None).
         """
         try:
-            with self.db_tool.get_connection() as conn:
+            with psycopg2.connect(self.conn_string, connect_timeout=timeout) as conn:
+                with conn.cursor() as cursor:
+                    # Execute minimal query to verify connectivity
+                    cursor.execute("SELECT version();")
+                    version = cursor.fetchone()[0]
+
+            return {
+                "status": True,
+                "message": "Database connection verified successfully.",
+                "database_version": version,
+            }
+        except psycopg2.OperationalError as e:
+            return {
+                "status": False,
+                "message": f"Database connection failed: {str(e)}",
+                "database_version": None,
+            }
+        except psycopg2.DatabaseError as e:
+            return {
+                "status": False,
+                "message": f"Database error during verification: {str(e)}",
+                "database_version": None,
+            }
+        except Exception as e:
+            return {
+                "status": False,
+                "message": f"Unexpected error verifying database connection: {str(e)}",
+                "database_version": None,
+            }
+
+    def run_query(self, query: str) -> str:
+        """
+        Executes a read-only SQL query against the PostgreSQL database and returns results.
+        Use this tool to fetch structural enterprise schemas, products stock, and transaction tables.
+
+        :param query: A valid SQL query string.
+        :return: string representation of rows or error message.
+        """
+        if any(keyword in query.upper() for keyword in self.forbidden_keywords):
+            return "Error: Security violation. Query contains forbidden modification keywords."
+
+        try:
+            with psycopg2.connect(self.conn_string) as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(query)
+                    columns = [desc[0] for desc in cursor.description]
                     rows = cursor.fetchall()
 
-            if not rows:
-                return "Schema Status Notice: No accessible structural tables found."
+                    if not rows:
+                        return "Query executed successfully. No records returned."
 
-            schema_map = {}
-            for table, column, d_type in rows:
-                if table not in schema_map:
-                    schema_map[table] = []
-                schema_map[table].append(f"{column} ({d_type})")
-
-            doc_lines = ["Available Database Tables and Structural Columns:"]
-            for table_name, columns in schema_map.items():
-                col_string = ", ".join(columns)
-                doc_lines.append(
-                    f"- Table: {self.target_schema}.{table_name} -> Columns: [{col_string}]"
-                )
-
-            return "\n".join(doc_lines)
-
+                    result = [dict(zip(columns, row)) for row in rows]
+                    return str(result)
         except Exception as e:
-            print(
-                f"[SCHEMA DISCOVERER ERROR] Could not extract live documentation data: {e}"
-            )
-            # Fix column headers to perfectly mirror your live schema tables
-            return f"- Table: {self.target_schema}.products -> Columns: [id (integer), product_name (character varying), product_price (numeric), stock_volume (integer)]"
+            return f"Database Execution Error: {str(e)}"
