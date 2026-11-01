@@ -10,6 +10,11 @@ class SQLAgentManager:
         self.agent = self._build_agent()
 
     def _build_agent(self) -> Agent:
+        connection_status = self.db_tool.verify_connection()
+
+        if not connection_status["status"]:
+            print(f"Cannot proceed: {connection_status['message']}")
+            return None
         return Agent(
             name="AgentSQL",
             model=Ollama(

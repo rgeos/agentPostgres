@@ -1,11 +1,9 @@
-import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Import the class managers
 from AgentSQL import SQLAgentManager
 from AgentConsulting import ConsultingAgentManager
 from AgentSupport import SupportAgentManager
@@ -20,7 +18,6 @@ class AgentQuery(BaseModel):
 
 @app.post("/query")
 async def handle_agent_interaction(payload: AgentQuery):
-    # Map the routing strings directly to Class definitions
     agent_class_map = {
         "SQL": SQLAgentManager,
         "Consulting": ConsultingAgentManager,
@@ -34,7 +31,6 @@ async def handle_agent_interaction(payload: AgentQuery):
         )
 
     try:
-        # Instantiate the manager class dynamically and execute the runtime run pipeline
         manager_instance = TargetClass()
         result_content = manager_instance.run(payload.question)
         return {"status": "success", "response": result_content}

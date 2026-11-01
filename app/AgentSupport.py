@@ -2,11 +2,13 @@ import os
 from agno.agent import Agent
 from agno.models.ollama import Ollama
 from pypdf import PdfReader
+from Database import DatabaseTool
 
 
 class SupportAgentManager:
     def __init__(self):
         self.doc_dir = "./app/documentation"
+        self.db_tool = DatabaseTool()
         self.agent = self._build_agent()
 
     def lookup_pdf_manuals(self, search_keyword: str) -> str:
@@ -36,6 +38,11 @@ class SupportAgentManager:
         )
 
     def _build_agent(self) -> Agent:
+        connection_status = self.db_tool.verify_connection()
+
+        if not connection_status["status"]:
+            print(f"Cannot proceed: {connection_status['message']}")
+            return None
         return Agent(
             name="AgentSupport",
             model=Ollama(

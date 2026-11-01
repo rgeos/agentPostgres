@@ -77,7 +77,6 @@ services:
     networks:
       - agno_network
 
-  # Core Orchestration Engine: Hosting migrated Agno Multi-Agent framework
   app:
     build:
       context: .
@@ -86,11 +85,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://${LLM_READER_USER:-llm_reader_user}:${LLM_READER_PASSWORD:-password}@postgres:5432/${DB_NAME:-rag_database}
+      - DATABASE_URL=postgresql://${LLM_READER_USER:-llm_reader}:${LLM_READER_PASSWORD:-llm_password}@postgres:5432/${DB_NAME:-rag_database}
       - OLLAMA_HOST=http://ollama:11434
     volumes:
       - ./app:/app
-      - ./documentation:/app/documentation
+      - ./app/documentation:/app/documentation
     depends_on:
       postgres:
         condition: service_healthy
