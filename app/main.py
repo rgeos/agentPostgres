@@ -24,12 +24,14 @@ async def handle_agent_interaction(payload: AgentQuery):
     agent_class_map = {
         "SQL": SQLAgentManager,
         "Consulting": ConsultingAgentManager,
-        "Support": SupportAgentManager
+        "Support": SupportAgentManager,
     }
 
     TargetClass = agent_class_map.get(payload.agent_type.strip())
     if not TargetClass:
-        raise HTTPException(status_code=400, detail="Invalid agent selector type configuration.")
+        raise HTTPException(
+            status_code=400, detail="Invalid agent selector type configuration."
+        )
 
     try:
         # Instantiate the manager class dynamically and execute the runtime run pipeline
@@ -39,7 +41,7 @@ async def handle_agent_interaction(payload: AgentQuery):
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Inference error during class execution pipeline: {str(e)}"
+            detail=f"Inference error during class execution pipeline: {str(e)}",
         )
 
 

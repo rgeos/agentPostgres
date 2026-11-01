@@ -4,8 +4,18 @@ import psycopg2
 
 class DatabaseTool:
     def __init__(self):
-        self.conn_string = os.getenv("DATABASE_URL", "postgres+psycopg2://postgres:password@localhost:5432/rag_database")
-        self.forbidden_keywords = ["DROP", "DELETE", "TRUNCATE", "ALTER", "UPDATE", "INSERT"]
+        self.conn_string = os.getenv(
+            "DATABASE_URL",
+            "postgres+psycopg2://postgres:password@localhost:5432/rag_database",
+        )
+        self.forbidden_keywords = [
+            "DROP",
+            "DELETE",
+            "TRUNCATE",
+            "ALTER",
+            "UPDATE",
+            "INSERT",
+        ]
 
     def run_query(self, query: str) -> str:
         """

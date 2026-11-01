@@ -29,23 +29,26 @@ class SupportAgentManager:
                             extracted_text += f"\n--- From {file} ---\n" + text[:1500]
                 except Exception as e:
                     continue
-        return extracted_text if extracted_text else "No relevant information found in local PDF manuals."
+        return (
+            extracted_text
+            if extracted_text
+            else "No relevant information found in local PDF manuals."
+        )
 
     def _build_agent(self) -> Agent:
         return Agent(
             name="AgentSupport",
             model=Ollama(
-                id="qwen2.5:3b",
-                host=os.getenv("OLLAMA_HOST", "http://localhost:11434")
+                id="qwen2.5:3b", host=os.getenv("OLLAMA_HOST", "http://localhost:11434")
             ),
             description="You are a client-facing product support specialist.",
             instructions=[
                 "Answer customer lookups regarding product lineage, origins, and operational manual workflows.",
                 "Exclusively use local documentation tools to fetch context information offline.",
-                "Be factual, precise, and never invent detail parameters not present in local manuals."
+                "Be factual, precise, and never invent detail parameters not present in local manuals.",
             ],
             tools=[self.lookup_pdf_manuals],
-            markdown=True
+            markdown=True,
         )
 
     def run(self, question: str) -> str:
