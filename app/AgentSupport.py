@@ -6,7 +6,7 @@ from pypdf import PdfReader
 
 class SupportAgentManager:
     def __init__(self):
-        self.doc_dir = "./documentation"
+        self.doc_dir = "./app/documentation"
         self.agent = self._build_agent()
 
     def lookup_pdf_manuals(self, search_keyword: str) -> str:
