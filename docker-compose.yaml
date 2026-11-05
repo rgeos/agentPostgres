@@ -116,7 +116,6 @@ volumes:
   ollama_data:
     name: agent-aquila-ollama
   lancedb_data:
-    name: agent-aquila-lancedb
 
 networks:
   agno_network:
