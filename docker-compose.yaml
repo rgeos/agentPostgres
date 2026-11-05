@@ -68,7 +68,19 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    entrypoint: [ "sh", "-c", "ollama pull qwen2.5:3b" ]
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for Ollama server to start...';
+      while ! ollama list >/dev/null 2>&1; do sleep 1; done;
+      echo 'Server started! Pulling models...';
+      for model in nomic-embed-text qwen2.5:3b ; do
+        echo 'Pulling $$model...';
+        ollama pull $$model;
+      done;
+      echo 'All models pulled successfully!';
+      wait
+      "
+    restart: on-failure
     environment:
       - OLLAMA_HOST=ollama:11434
 
@@ -86,6 +98,7 @@ services:
     volumes:
       - ./app:/app
       - ./app/documentation:/app/documentation
+      - lancedb_data:/app/tmp/lancedb
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,6 +115,8 @@ volumes:
     name: agent-aquila-pgdata
   ollama_data:
     name: agent-aquila-ollama
+  lancedb_data:
+    name: agent-aquila-lancedb
 
 networks:
   agno_network:
