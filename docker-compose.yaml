@@ -85,7 +85,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://${LLM_READER_USER:-llm_reader}:${LLM_READER_PASSWORD:-llm_password}@postgres:5432/${DB_NAME:-rag_database}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@{DB_HOST:-postgres_db}:5432/${DB_NAME:-rag_database}
       - OLLAMA_HOST=http://ollama:11434
     volumes:
       - ./app:/app
