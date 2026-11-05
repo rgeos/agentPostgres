@@ -1,22 +1,28 @@
 name: agent-aquila
 
+x-function: &basics
+  restart: unless-stopped
+  env_file:
+    - .env
+  deploy:
+    resources:
+      limits:
+        memory: 8g
+  networks:
+    - agno_network
+
 services:
   postgres:
+    <<: *basics
     image: pgvector/pgvector:pg16
     container_name: postgres_db
-    environment:
-      DB_HOST: ${DB_HOST:-postgres}
-      POSTGRES_DB: ${DB_NAME:-rag_database}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
-      DB_PORT: ${DB_PORT:-5432}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./app/data/:/docker-entrypoint-initdb.d/:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-rag_database}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,11 +31,9 @@ services:
         limits:
           cpus: '1.0'
           memory: 512M
-    restart: unless-stopped
-    networks:
-      - agno_network
 
   ollama:
+    <<: *basics
     image: ollama/ollama:latest
     container_name: ollama_llm
     ports:
@@ -55,17 +59,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-#          cpus: '4.0'
-          memory: 4096M
-    restart: unless-stopped
-    networks:
-      - agno_network
 
   # Initialization Hook: Auto-downloads model on the first startup
   ollama-bootstrap:
+    <<: *basics
     image: ollama/ollama:latest
     container_name: ollama_bootstrap
     depends_on:
@@ -74,10 +71,9 @@ services:
     entrypoint: [ "sh", "-c", "ollama pull qwen2.5:3b" ]
     environment:
       - OLLAMA_HOST=ollama:11434
-    networks:
-      - agno_network
 
   app:
+    <<: *basics
     build:
       context: .
       dockerfile: app/Dockerfile
@@ -85,7 +81,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@{DB_HOST:-postgres_db}:5432/${DB_NAME:-rag_database}
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
       - OLLAMA_HOST=http://ollama:11434
     volumes:
       - ./app:/app
@@ -100,9 +96,6 @@ services:
         limits:
           cpus: '2.0'
           memory: 512M
-    restart: unless-stopped
-    networks:
-      - agno_network
 
 volumes:
   pgdata:
