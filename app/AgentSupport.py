@@ -1,8 +1,13 @@
+import logging
 import os
 from agno.agent import Agent
 from agno.models.ollama import Ollama
 from pypdf import PdfReader
 from Database import DatabaseTool
+
+# todo - remove this
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class SupportAgentManager:
@@ -13,12 +18,25 @@ class SupportAgentManager:
 
     def lookup_pdf_manuals(self, search_keyword: str) -> str:
         """
-        Searches through local infrastructure document manuals and PDF guides for specific support matching lines.
+        Searches local PDF manuals for pages containing the search keyword.
 
+        PDF extensions are matched without regard to case. Files are searched
+        directly inside the documentation folder, not in subfolders.
         :param search_keyword: Word or topic to search within local manuals.
         """
         if not os.path.exists(self.doc_dir):
+            logger.error(f"Directory {self.doc_dir} does not exist")
             return "No manual documentation folder configured locally."
+
+        try:
+            files = os.listdir(self.doc_dir)
+        except OSError:
+            logger.exception(f"Could not list files from {self.doc_dir} directory")
+            return "Unable to read the local documentation folder."
+
+        logger.info("Files found in %s: %s", self.doc_dir, files or "none")
+
+
 
         extracted_text = ""
         for file in os.listdir(self.doc_dir):
