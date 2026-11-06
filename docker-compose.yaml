@@ -55,7 +55,7 @@ services:
       retries: 5
     environment:
       - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL}
-    cpuset: "0-15"
+    cpuset: ${CPU_SET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,21 +68,29 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      echo 'Waiting for Ollama server to start...';
-      while ! ollama list >/dev/null 2>&1; do sleep 1; done;
-      echo 'Server started! Pulling models...';
-      for model in nomic-embed-text qwen2.5:3b ; do
-        echo 'Pulling $$model...';
-        ollama pull $$model;
-      done;
-      echo 'All models pulled successfully!';
-      wait
-      "
-    restart: on-failure
+    # todo - create a nicer entry point
+    # split a comma delimited variable
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo 'Waiting for Ollama server to start...'
+        while ! ollama list >/dev/null 2>&1; do sleep 1; done
+        if [ -z "$$LLM_MODELS" ]; then
+          echo 'No models specified in LLM_MODELS variable.'
+        else
+          set -f
+          IFS=,
+          for model in $$LLM_MODELS; do
+            [ -n "$$model" ] || continue
+            ollama pull "$$model" || exit 1
+          done
+          echo 'All specified models pulled successfully!'
+        fi
+    restart: no
     environment:
       - OLLAMA_HOST=ollama:11434
+      - LLM_MODELS=${LLM_MODELS}
 
   app:
     <<: *basics
@@ -96,14 +104,16 @@ services:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
       - OLLAMA_HOST=http://ollama:11434
     volumes:
+      - lancedb_data:/app/${LANCE_DB_DATA}
       - ./app:/app
-      - ./app/documentation:/app/documentation
-      - lancedb_data:/app/tmp/lancedb
+      - ./app/${PDF_DIRECTORY}:/app/${PDF_DIRECTORY}
     depends_on:
       postgres:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      ollama-bootstrap:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits:

@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 class SupportAgentManager:
     def __init__(
         self,
-        pdf_dir: str | Path = "documentation",
-        db_dir: str | str = "tmp/lancedb",
+        pdf_dir: str | Path = os.getenv("PDF_DIRECTORY", "documentation"),
+        db_dir: str | str = os.getenv("LANCE_DB_DATA", "lancedb"),
     ) -> None:
         self.pdf_dir = Path(pdf_dir)
         self.db_dir = db_dir
@@ -28,7 +28,7 @@ class SupportAgentManager:
         self.ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
         if not self.pdf_dir.exists():
-            logger.error(f"PDF folder does not exist: {self.pdf_dir}")
+            logger.error(f"❌ PDF folder does not exist: {self.pdf_dir}")
             raise FileNotFoundError(f"PDF folder does not exist: {self.pdf_dir}")
 
         self.knowledge = Knowledge(
@@ -38,7 +38,9 @@ class SupportAgentManager:
                 table_name="pdf_knowledge_base",
                 uri=self.db_dir,
                 embedder=OllamaEmbedder(
-                    id="nomic-embed-text", dimensions=768, host=self.ollama_host
+                    id="nomic-embed-text",  # todo - pick it up from the .env
+                    dimensions=768,
+                    host=self.ollama_host,
                 ),
             ),
         )
@@ -51,12 +53,12 @@ class SupportAgentManager:
         pdf_files = list(self.pdf_dir.glob("*.pdf"))
 
         if not pdf_files:
-            logger.warning("No PDF files found in this directory")
+            logger.warning("⚠ No PDF files found in this directory")
             raise NotADirectoryError(
-                f" No PDF documents found inside '{self.pdf_dir}'. Add files to your local folder."
+                f"⚠ No PDF documents found inside '{self.pdf_dir}'. Add files to your local folder."
             )
 
-        logger.info(f"Found {len(pdf_files)} PDF file(s) to ingest...")
+        logger.info(f"ℹ️ Found {len(pdf_files)} PDF file(s) to ingest...")
         for pdf_path in pdf_files:
             self.knowledge.insert(
                 name=pdf_path.relative_to(self.pdf_dir).as_posix(),
@@ -64,18 +66,18 @@ class SupportAgentManager:
                 reader=PDFReader(split_on_pages=True),
                 skip_if_exists=True,
             )
-        logger.info(f"Ingestion complete.")
+        logger.info(f"✅ Ingestion complete.")
 
     def _build_agent(self) -> Agent:
         connection_status = self.db_tool.verify_connection()
 
         if not connection_status["status"]:
-            logger.error(f"Cannot proceed: {connection_status['message']}")
+            logger.error(f"❌ Cannot proceed: {connection_status['message']}")
             return None
         return Agent(
             name="AgentSupport",
             model=Ollama(
-                id="qwen2.5:3b",
+                id="qwen2.5:3b",  # todo - pick it up from the .env
                 host=self.ollama_host,
                 options={"temperature": 0.0},
             ),
