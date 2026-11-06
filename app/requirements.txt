@@ -1,8 +1,13 @@
 agno[ollama]
 fastapi
-uvicorn
+fonttools
+lancedb
+openai
 psycopg2-binary
+psycopg[binary]
 pydantic
 pypdf
 python-dotenv
-openai
+schedule
+sqlalchemy
+uvicorn
