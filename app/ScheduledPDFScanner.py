@@ -1,46 +1,27 @@
 import logging
-import schedule
+from typing import Any
+from BaseKnowledgeAgent import BaseKnowledgeAgentManager
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class ScheduledPDFScanner:
-    """Scans and updates the knowledge base at a specific time every day."""
+    """Scans and updates a manager's knowledge base on a schedule or manual trigger."""
 
-    def __init__(self, manager_instance):
+    def __init__(self, manager_instance: BaseKnowledgeAgentManager) -> None:
         self.manager = manager_instance
 
-    def scan_and_ingest(self):
-        """The cron-like job triggered by the scheduler."""
-        logger.info("🕒 Daily scheduled scan started...")
+    def scan_and_ingest(self) -> dict[str, Any]:
+        """Runs the PDF synchronization and returns a summary report."""
+        logger.info(
+            f"🕒 Sync started for '{self.manager.table_name}' "
+            f"in '{self.manager.pdf_dir}'..."
+        )
         try:
-            pdf_files = list(self.manager.pdf_dir.glob("*.pdf"))
-            if not pdf_files:
-                logger.info("ℹ️ No PDF files found during this scan.")
-                return
-
-            new_files_count = 0
-
-            for pdf_path in pdf_files:
-                file_name = pdf_path.relative_to(self.manager.pdf_dir).as_posix()
-
-                # skip_if_exists=True ensures only *newly added* files get processed
-                logger.info(f"ℹ️ Checking tracking state for: {file_name}")
-                self.manager.knowledge.insert(
-                    name=file_name,
-                    path=str(pdf_path),
-                    reader=None,  # Falls back to the class's default configuration
-                    skip_if_exists=True,
-                )
-                new_files_count += 1
-
-            if new_files_count > 0:
-                logger.info(
-                    f"✅ Daily synchronization complete. Processed {new_files_count} files."
-                )
-            else:
-                logger.info("✅ Daily synchronization complete. No new updates found.")
-
+            summary = self.manager.ingest_pdfs()
+            return {"status": "success", **summary}
         except Exception as e:
-            logger.error(f"❌ Error occurred during scheduled scan: {str(e)}")
+            logger.error(
+                f"❌ Error during sync for '{self.manager.table_name}': {str(e)}"
+            )
+            raise
